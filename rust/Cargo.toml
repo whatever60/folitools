@@ -1,0 +1,12 @@
+[package]
+name = "calc_rest_stats"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+fastq = "0.6"
+flate2 = "1.0"
+indicatif = "0.17"
+polars = { version = "0.40", features = ["parquet"] }
+rayon = "1.8"

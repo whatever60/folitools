@@ -1,0 +1,19 @@
+name: folitools
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python>=3.12
+  - pip
+  - rust
+  - gcc
+  - fastp
+  - cutadapt
+  - samtools
+  - bwa-mem2
+  - star
+  - seqkit
+  - fastqc
+  - subread
+  - pigz

@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
 
-###############################################################################
-# RNA-seq Pre-STAR Pipeline
-#
-# Steps:
-# 1. FastQC + SeqKit on raw reads
-# 2. fastp trimming (3' sliding window)
-# 3. FastQC + SeqKit on trimmed reads
-# 4. Cutadapt for demultiplexing and UMI extraction
-# 5. Combine reads for STAR alignment
-#
-###############################################################################
-
-# set -euo pipefail
+set -euo pipefail
 
 ############################################
 # User-configurable paths

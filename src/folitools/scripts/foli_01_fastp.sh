@@ -45,7 +45,7 @@ fi
 fqr1s=$(ls "$FASTQ_DIR"/$GLOB_PATTERN)
 i=0
 for fqR1 in $fqr1s; do
-    i=$((i+1))
+    ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
     # fi
@@ -75,47 +75,58 @@ for fqR1 in $fqr1s; do
     # ########################################################
     seqkit_out=$(seqkit seq $fqR1 | head -n 1 | wc -l)
     if [[ $seqkit_out -gt 0 ]]; then
-        fastqc -t "$THREADS" -o "$FASTQ_FASTQC_DIR" "$fqR1" "$fqR2" 2> /dev/null
+        fastqc -t "$THREADS" -o "$FASTQ_FASTQC_DIR" "$fqR1" "$fqR2" &> /dev/null
     fi
     ########################################################
-    # Step 2: fastp for trimming
+    # Step 2: fastp and cutadapt for trimming
     ########################################################
-    # We use novaseq, so we trim poly G tail
+    # No need for poly-G or TruSeq adapter trimming, fastp trimming by overlapp analysis is good enough. 
+    # fastp \
+    #     --in1 "$fqR1" \
+    #     --in2 "$fqR2" \
+    #     --stdout \
+    #     --thread "$THREADS" \
+    #     --cut_tail \
+    #     --correction \
+    #     --html "$FASTP_DIR/${sample_name}.fastp.html" \
+    #     --json "$FASTP_DIR/${sample_name}.fastp.json" \
+    #     2> /dev/null | cutadapt \
+    #         -e 2 \
+    #         -a "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC;min_overlap=5" \
+    #         -A "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT;min_overlap=5" \
+    #         -j "$THREADS" \
+    #         --interleaved \
+    #         -o "$trimmed_R1" \
+    #         -p "$trimmed_R2" \
+    #         - &> /dev/null
+        # --trim_poly_g \
+        # --trim_poly_x \
+        # --adapter_sequence AGATCGGAAGAGCACACGTC \
+        # --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGT \
+        # Adapter sequences are the first 20bp of Illumina TruSeq adapters:
+        # i7 adapter: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC
+        # i5 adapter: AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+
     fastp \
         --in1 "$fqR1" \
         --in2 "$fqR2" \
-        --stdout \
+        --out1 "$trimmed_R1" \
+        --out2 "$trimmed_R2" \
         --thread "$THREADS" \
         --cut_tail \
         --correction \
         --html "$FASTP_DIR/${sample_name}.fastp.html" \
         --json "$FASTP_DIR/${sample_name}.fastp.json" \
-        2> /dev/null | cutadapt \
-            -e 2 \
-            -a "AGATCGGAAGAGCACACGTC;min_overlap=5" \
-            -A "AGATCGGAAGAGCGTCGTGT;min_overlap=5" \
-            -j "$THREADS" \
-            --interleaved \
-            -o "$trimmed_R1" \
-            -p "$trimmed_R2" \
-            - &> /dev/null
-        # --trim_poly_g \
-        # --trim_poly_x \
-        # --adapter_sequence AGATCGGAAGAGCACACGTC \
-        # --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGT \
-
-        # Adapter sequences are the first 20bp of Illumina TruSeq adapters:
-        # i7 adapter: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC
-        # i5 adapter: AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+        2> /dev/null
 
     # ########################################################
     # # Step 3: FastQC on trimmed reads
     # ########################################################
     seqkit_out=$(seqkit seq $trimmed_R1 | head -n 1 | wc -l)
     if [[ $seqkit_out -gt 0 ]]; then
-        fastqc -t "$THREADS" -o "$FASTP_FASTQC_DIR" "$trimmed_R1" "$trimmed_R2" 2> /dev/null
+        fastqc -t "$THREADS" -o "$FASTP_FASTQC_DIR" "$trimmed_R1" "$trimmed_R2" &> /dev/null
     fi
-done | tqdm --total $(echo "$fqr1s" | wc -w)
+done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 if [[ -f "$FASTP_DIR.stats" ]]; then
     echo "Output file '$FASTP_DIR.stats' already exists. Skipping seqkit stats."

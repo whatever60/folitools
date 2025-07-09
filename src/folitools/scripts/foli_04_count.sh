@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+
 BAM_DIR="./star_bam"  # input
 FEATURECOUNTS_DIR="./featurecounts"
 COUNTS_DIR="./counts"

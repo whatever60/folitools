@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-############################################
-# User-configurable paths
-############################################
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/utils.sh"
+
 FASTQ_DIR="./fastq"
 FASTQ_FASTQC_DIR="./fastq_fastqc"
 FASTP_DIR="./fastp"
@@ -13,19 +13,9 @@ THREADS=8
 
 GLOB_PATTERN="${1:-*_R1_*.fastq.gz}"  # Use first argument if given, otherwise default
 
-############################################
-# Create output directories if needed
-############################################
 mkdir -p "$FASTQ_DIR" "$FASTQ_FASTQC_DIR" "$FASTP_DIR" "$FASTP_FASTQC_DIR"
 
-############################################
-# SeqKit stats for raw FASTQs
-############################################
-if [[ -f "$FASTQ_DIR.stats" ]]; then
-    echo "Output file '$FASTQ_DIR.stats' already exists. Skipping seqkit stats."
-else
-    seqkit stats --all --tabular --threads "$THREADS" "$FASTQ_DIR"/*.fastq.gz > $FASTQ_DIR.stats
-fi
+run_seqkit_stats "$FASTQ_DIR"
 
 ############################################
 # Main loop over paired-end FASTQs in ./fastq
@@ -58,16 +48,7 @@ for fqR1 in $fqr1s; do
     fi
     echo "Processing sample: $sample_name"
 
-    # ########################################################
-    # # Step 1: FastQC on raw reads
-    # ########################################################
-    seqkit_out=$(seqkit seq $fqR1 | head -n 1 | wc -l)
-    if [[ $seqkit_out -gt 0 ]]; then
-        fastqc -t "$THREADS" -o "$FASTQ_FASTQC_DIR" "$fqR1" "$fqR2" &> /dev/null
-    fi
-    ########################################################
-    # Step 2: fastp and cutadapt for trimming
-    ########################################################
+    run fastqc "$fqR1" "$fqR2" "$FASTQ_FASTQC_DIR" "$THREADS"
     # No need for poly-G or TruSeq adapter trimming, fastp trimming by overlapp analysis is good enough. 
     # fastp \
     #     --in1 "$fqR1" \
@@ -107,19 +88,9 @@ for fqR1 in $fqr1s; do
         --json "$FASTP_DIR/${sample_name}.fastp.json" \
         2> /dev/null
 
-    # ########################################################
-    # # Step 3: FastQC on trimmed reads
-    # ########################################################
-    seqkit_out=$(seqkit seq $trimmed_R1 | head -n 1 | wc -l)
-    if [[ $seqkit_out -gt 0 ]]; then
-        fastqc -t "$THREADS" -o "$FASTP_FASTQC_DIR" "$trimmed_R1" "$trimmed_R2" &> /dev/null
-    fi
+    run_fastqc "$trimmed_R1" "$trimmed_R2" "$FASTP_FASTQC_DIR" "$THREADS"
 done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
-if [[ -f "$FASTP_DIR.stats" ]]; then
-    echo "Output file '$FASTP_DIR.stats' already exists. Skipping seqkit stats."
-else
-    seqkit stats --all --tabular --threads "$THREADS" "$FASTP_DIR"/*.fq.gz > $FASTP_DIR.stats
-fi
+run_seqkit_stats "$FASTP_DIR"
 
 echo "Pre-STAR pipeline completed successfully!"

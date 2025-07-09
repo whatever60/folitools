@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+
 REST_DIR="./rest"
 STAR_DIR="./star"
 BAM_DIR="./star_bam"

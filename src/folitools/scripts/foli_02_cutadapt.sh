@@ -3,9 +3,9 @@
 set -euo pipefail
 ulimit -n 1000000
 
-############################################
-# User-configurable paths
-############################################
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/utils.sh"
+
 FASTP_DIR=./fastp  # input
 REST_DIR="./rest_all"
 REST_NONDIMER_DIR="./rest"
@@ -78,15 +78,7 @@ for fqR1 in $fqr1s; do
         2> /dev/null > /dev/null
 done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
-if [[ -f "$REST_DIR.stats" ]]; then
-    echo "Output file '$REST_DIR.stats' already exists. Skipping seqkit stats."
-else
-    seqkit stats --all --tabular --threads "$THREADS" $REST_DIR/*.fq.gz > $REST_DIR.stats
-fi
-if [[ -f "$REST_NONDIMER_DIR.stats" ]]; then
-    echo "Output file '$REST_NONDIMER_DIR.stats' already exists. Skipping seqkit stats."
-else
-    seqkit stats --all --tabular --threads "$THREADS" $REST_NONDIMER_DIR/*.fq.gz > $REST_NONDIMER_DIR.stats
-fi
+run_seqkit_stats "$REST_DIR"
+run_seqkit_stats "$REST_NONDIMER_DIR"
 
 echo "Pre-STAR pipeline completed successfully!"

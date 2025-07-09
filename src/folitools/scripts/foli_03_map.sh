@@ -1,8 +1,12 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
 REST_DIR="./rest"
 STAR_DIR="./star"
 BAM_DIR="./star_bam"
 THREADS=16
 # STAR_INDEX="$HOME/data/gencode/Gencode_human/release_46/STAR_2.7.11b_150"
+# STAR_INDEX="$HOME/data/gencode/Gencode_mouse/release_M32/STAR_2.7.10b_150"
 
 GLOB_PATTERN="${1:-*_1.fq.gz}"       # Optional pattern for FASTQ files
 STAR_INDEX="${2:?Usage: $0 [FASTQ_PATTERN] STAR_INDEX_PATH}"  # Required STAR index path
@@ -17,8 +21,8 @@ rm -rf _temp
 
 fqr1s=$(ls "$REST_DIR"/$GLOB_PATTERN)
 i=0
-for fqR1 in "$REST_DIR"/*_1.fq.gz; do
-    i=$((i+1))
+for fqR1 in $fqr1s; do
+    ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
     # fi
@@ -35,7 +39,7 @@ for fqR1 in "$REST_DIR"/*_1.fq.gz; do
     fi
     echo "Processing sample: $sample_name"
 
-
+    # Note that we are not sorting the BAM files here.
     STAR \
         --runThreadN $THREADS \
         --genomeDir $STAR_INDEX \
@@ -53,10 +57,10 @@ for fqR1 in "$REST_DIR"/*_1.fq.gz; do
         --outStd SAM \
         --outTmpKeep None \
         --quantMode GeneCounts | \
-        python add_tags.py \
+        python -m folitools.add_tags \
             --output $BAM_DIR/${sample_name}.bam \
             --cell_tag ${sample_name}
-done | tqdm --total $(echo "$fqr1s" | wc -w)
+done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 # Unload the STAR genome index to free up memory
 STAR \

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-############################################
-# User-configurable paths
-############################################
+set -euo pipefail
 BAM_DIR="./star_bam"  # input
 FEATURECOUNTS_DIR="./featurecounts"
 COUNTS_DIR="./counts"
@@ -18,10 +16,10 @@ GTF="${2:?Usage: $0 [BAM_PATTERN] GTF_PATH}"             # Required GTF file pat
 ############################################
 mkdir -p "$FEATURECOUNTS_DIR" "$COUNTS_DIR"
 
-bams=$(ls "$BAM_DIR"/$GLOB_PATTERN 2>/dev/null)
+bams=$(ls "$BAM_DIR"/$GLOB_PATTERN)
 i=0
 for star_bam in $bams; do
-    i=$((i+1))
+    ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
     # fi
@@ -29,30 +27,22 @@ for star_bam in $bams; do
     sample_name="${base_name%%_*}"
     echo "Processing sample: $sample_name"
 
-    ########################################################
-    # Step 6: featureCounts
     # -p: sequencing data is paired-end
     # -B: Only count reads that are properly paired
     # -C: Do not count read pairs that have two ends mapping to different chromosomes or 
     # mapping to the same chromosome but on different strands.
-    ######################################################
     featureCounts \
         -T "$THREADS" \
         -a "$GTF" \
-        -o "$FEATURECOUNTS_DIR/" \
-        -p -B -C -R BAM \
+        -o "$FEATURECOUNTS_DIR/${sample_name}" \
+        -p -B -C \
+        -R BAM \
+        -Rpath "$FEATURECOUNTS_DIR/${sample_name}.bam" \
         "$BAM_DIR/${sample_name}.bam" 2> $FEATURECOUNTS_DIR/$sample_name.log
-    mv $FEATURECOUNTS_DIR/.summary $FEATURECOUNTS_DIR/${sample_name}.summary
-
     # Sort BAM files from featureCounts to prepare for UMI-tools
-    sambamba sort "$FEATURECOUNTS_DIR/${sample_name}.bam.featureCounts.bam" 2> /dev/null
-    rm "$FEATURECOUNTS_DIR/${sample_name}.bam.featureCounts.bam"
-    mv "$FEATURECOUNTS_DIR/${sample_name}.bam.featureCounts.sorted.bam" "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
-    mv "$FEATURECOUNTS_DIR/${sample_name}.bam.featureCounts.sorted.bam.bai" "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam.bai"
+    sambamba sort "$FEATURECOUNTS_DIR/${sample_name}.bam" 2> /dev/null
+    rm "$FEATURECOUNTS_DIR/${sample_name}.bam"
 
-    ########################################################
-    # Step 7: UMI-tools for deduplication and counts
-    ########################################################
     umi_tools count \
         --method unique \
         --per-cell \
@@ -67,22 +57,27 @@ for star_bam in $bams; do
         -I "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
         -S "$COUNTS_DIR/${sample_name}.tsv.gz" > $COUNTS_DIR/${sample_name}.log
 
+    # Run the `group` subcommand to get richer information.
+    # Output: grouped.bam and group.tsv.gz
+    # Count matrix can be derived from group.tsv.gz.
+    # So the above `count` command becomes optional if you run `group`. But if you don't need 
+    # per-read information, you just need to run `count`.
     umi_tools group \
         --method=unique \
         --per-cell \
         --per-gene \
-        --cell-tag=CB \
-        --cell-tag-split="" \
-        --gene-tag=XT \
-        --umi-tag=UP \
-        --assigned-status-tag=XS \
-        --extract-umi-method=tag \
-        --group-out="$COUNTS_DIR/${sample_name}.group.tsv.gz" \
+        --cell-tag CB \
+        --cell-tag-split "" \
+        --gene-tag XT \
+        --umi-tag UP \
+        --assigned-status-tag XS \
+        --extract-umi-method tag \
+        --group-out "$COUNTS_DIR/${sample_name}.group.tsv.gz" \
         --output-bam \
         -S "$COUNTS_DIR/${sample_name}.grouped.bam" \
         -I "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
         > "$COUNTS_DIR/${sample_name}.group.log"
 
-done | tqdm --total $(echo "$bams" | wc -w)
+done | tqdm --total $(echo "$bams" | wc -w) > /dev/null
 
 echo "Pipeline completed successfully!"

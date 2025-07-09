@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
 
-###############################################################################
-# RNA-seq Pre-STAR Pipeline
-#
-# Steps:
-# 1. FastQC + SeqKit on raw reads
-# 2. fastp trimming (3' sliding window)
-# 3. FastQC + SeqKit on trimmed reads
-# 4. Cutadapt for demultiplexing and UMI extraction
-# 5. Combine reads for STAR alignment
-#
-###############################################################################
-
-# set -euo pipefail
+set -euo pipefail
 ulimit -n 1000000
 
 ############################################
@@ -38,7 +26,7 @@ mkdir -p $REST_DIR $REST_NONDIMER_DIR
 fqr1s=$(ls "$FASTP_DIR"/$GLOB_PATTERN)
 i=0
 for fqR1 in $fqr1s; do
-    i=$((i+1))
+    ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
     # fi
@@ -65,19 +53,30 @@ for fqR1 in $fqr1s; do
         -o - \
         "$fqR1" "$fqR2" \
         2> /dev/null \
-        | python add_umi.py \
+        | python -m folitools.add_umi \
             --o1 "$REST_DIR/${sample_name}_1.fq.gz" \
             --o2 "$REST_DIR/${sample_name}_2.fq.gz"
 
-    # Remove reads that are too short (these are considered primer dimers)
+    # Remove reads that are too short or have name containing "no_adapter" (these are 
+    # considered primer dimers)
     cutadapt \
-    -j 8 \
-    --minimum-length 60:60 \
-    -o >(paste - - - - | grep -v 'no_adapter' | tr '\t' '\n' | gzip > "$REST_NONDIMER_DIR/${sample_name}_1.fq.gz") \
-    -p >(paste - - - - | grep -v 'no_adapter' | tr '\t' '\n' | gzip > "$REST_NONDIMER_DIR/${sample_name}_2.fq.gz") \
-    "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
-    2> /dev/null > /dev/null
-done | tqdm --total $(echo "$fqr1s" | wc -w)
+        -j 8 \
+        --minimum-length 60:60 \
+        -o \
+            >(paste - - - - \
+            | grep -v 'no_adapter' \
+            | tr '\t' '\n' \
+            | gzip \
+            > "$REST_NONDIMER_DIR/${sample_name}_1.fq.gz") \
+        -p \
+            >(paste - - - - \
+            | grep -v 'no_adapter' \
+            | tr '\t' '\n' \
+            | gzip \
+            > "$REST_NONDIMER_DIR/${sample_name}_2.fq.gz") \
+        "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
+        2> /dev/null > /dev/null
+done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 if [[ -f "$REST_DIR.stats" ]]; then
     echo "Output file '$REST_DIR.stats' already exists. Skipping seqkit stats."

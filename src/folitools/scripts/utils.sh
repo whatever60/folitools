@@ -30,28 +30,34 @@ run_seqkit_stats() {
 
 
 run_fastqc() {
-    # Usage: run_fastqc <trimmed_R1> <trimmed_R2> <THREADS> <FASTP_FASTQC_DIR>
+    # Usage: run_fastqc <trimmed_R1> <trimmed_R2> <output_dir> <threads>
     local trimmed_R1="$1"
     local trimmed_R2="$2"
     local output_dir="$3"
     local threads="$4"
 
     # Check for required arguments
-    if [[ -z "$trimmed_R1" || -z "$trimmed_R2" || -z "$threads" || -z "$output_dir" ]]; then
-        echo "Error: Missing arguments. Usage: run_fastqc <trimmed_R1> <trimmed_R2> <THREADS> <FASTP_FASTQC_DIR>" >&2
+    if [[ -z "$trimmed_R1" || -z "$trimmed_R2" || -z "$output_dir" || -z "$threads" ]]; then
+        echo "Error: Missing arguments. Usage: run_fastqc <trimmed_R1> <trimmed_R2> <output_dir> <threads>" >&2
         return 1
     fi
 
-    # Check that both input files exist and are non-empty (compressed)
     for file in "$trimmed_R1" "$trimmed_R2"; do
-        if [[ ! -s "$file" ]]; then
-            echo "Error: File '$file' does not exist or is empty." >&2
+        if [[ ! -f "$file" ]]; then
+            echo "Error: File '$file' does not exist." >&2
             return 1
         fi
 
-        if ! zcat "$file" | grep -q .; then
-            echo "Error: File '$file' appears to be empty after decompression." >&2
-            return 1
+        if file "$file" | grep -q 'gzip compressed'; then
+            if ! zcat "$file" | grep -q .; then
+                echo "Warning: File '$file' is compressed but has no content. Skipping FastQC." >&2
+                return
+            fi
+        else
+            if ! grep -q . "$file"; then
+                echo "Warning: File '$file' is uncompressed and empty. Skipping FastQC." >&2
+                return
+            fi
         fi
     done
 

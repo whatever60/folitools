@@ -48,7 +48,7 @@ for fqR1 in $fqr1s; do
     fi
     echo "Processing sample: $sample_name"
 
-    run fastqc "$fqR1" "$fqR2" "$FASTQ_FASTQC_DIR" "$THREADS"
+    # Run fastqc "$fqR1" "$fqR2" "$FASTQ_FASTQC_DIR" "$THREADS"
     # No need for poly-G or TruSeq adapter trimming, fastp trimming by overlapp analysis is good enough. 
     # fastp \
     #     --in1 "$fqR1" \

@@ -1,19 +1,23 @@
 import sys
 import gzip
+from typing import Annotated, TextIO
 
-import argparse
 import pysam
 from Bio import SeqIO
 from tqdm.auto import tqdm
+from cyclopts import App, Parameter
+
+
+app = App()
 
 
 def _get_fastq_id_seq_interleaved(
     fastq_iter,
-) -> tuple[str, str, str] | tuple[None, None, None]:
+) -> tuple[str, str, str] | tuple[None, str, str]:
     fastq_record1 = next(fastq_iter, None)
     fastq_record2 = next(fastq_iter, None)
     if fastq_record1 is None:
-        return None, None, None
+        return None, "", ""
     else:
         if fastq_record2 is None:
             raise ValueError("Second FASTQ record is missing")
@@ -25,7 +29,7 @@ def _get_fastq_id_seq_interleaved(
 
 
 def add_tags(
-    sam_stream: sys.stdin,
+    sam_stream: TextIO,
     fastq_file: str,
     output_bam: str,
     umi_tag_s_name: str = "US",  # single-read UMI
@@ -128,7 +132,7 @@ def add_tags(
 
 
 def add_tags_wo_fastq(
-    sam_stream: sys.stdin,
+    sam_stream: TextIO,
     output_bam: str,
     umi_tag_s_name: str = "US",  # single-read UMI
     umi_tag_p_name: str = "UP",  # concatenated UMI from paired reads
@@ -138,13 +142,35 @@ def add_tags_wo_fastq(
     umi_length: int | None = 6,
 ) -> None:
     """
-    Same as above, except here we expect the read id to be like:
-    <original_read_id>_{umi_r1}_{umi_r2}
+    Reads SAM from stdin, parses embedded UMI sequences from the read names,
+    adds UMI and optional cell tags, and writes a BAM file.
+
+    VERY IMPORTANT NOTE:
+        The read IDs must be formatted as:
+            <original_read_id>_{umi_r1}_{umi_r2}
+        where the two UMI sequences are appended to the original read name,
+        separated by underscores. These UMIs will be split out and tagged
+        appropriately.
+
+    Args:
+        sam_stream: Standard input stream for SAM data.
+        output_bam: Path to the output BAM file ('-' or None for stdout).
+        umi_tag_s_name: Name of the single-read UMI tag (default: 'US').
+        umi_tag_p_name: Name of the paired-read UMI tag (default: 'UP').
+        cell_tag_name: Name of the cell barcode tag (default: 'CB').
+        adapter_tag_name: Name of the adapter tag (unused here) (default: 'XA').
+        cell_tag: Optional cell barcode value to add to every read.
+        umi_length: Expected length of each individual UMI (default: 6).
     """
-    with (
-        pysam.AlignmentFile(sam_stream, "r") as sam_in,
-        pysam.AlignmentFile(output_bam, "wb", header=sam_in.header) as bam_out,
-    ):
+    # open the SAM input
+    sam_in = pysam.AlignmentFile(sam_stream, "r")
+    # decide BAM output
+    if output_bam in (None, "-"):
+        bam_out = pysam.AlignmentFile("-", "wb0", header=sam_in.header)
+    else:
+        bam_out = pysam.AlignmentFile(output_bam, "wb", header=sam_in.header)
+
+    with sam_in, bam_out:
         for read in sam_in:
             read_name, seq1, seq2 = read.query_name.split("_")
             if read.is_read1:
@@ -168,41 +194,58 @@ def add_tags_wo_fastq(
             bam_out.write(read)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Add UMI and cell tags to BAM file from FASTQ sequences."
-    )
-    parser.add_argument("--index_fastq", help="Path to the second FASTQ file")
-    parser.add_argument("--output", help="Path to the output BAM file")
-    parser.add_argument(
-        "--cell_tag_name",
-        default="CB",
-        help="Name of the cell tag to add (default: 'CB')",
-    )
-    parser.add_argument(
-        "--cell_tag",
-        default=None,
-        help="Value of the cell tag to add (default: 'default_cell_tag')",
-    )
-    args = parser.parse_args()
+@app.command(help="Add UMI and cell tags to BAM file from FASTQ sequences.")
+def main(
+    index_fastq: Annotated[
+        str | None,
+        Parameter(
+            name="--index_fastq",
+            help="Path to the interleaved FASTQ file (omit to use --add-tags-wo-fastq mode)",
+        ),
+    ] = None,
+    output: Annotated[
+        str | None,
+        Parameter(
+            name=["--output", "-o"],
+            help="Path to the output BAM file ('-' or omit for stdout)",
+        ),
+    ] = None,
+    cell_tag_name: Annotated[
+        str,
+        Parameter(
+            name="--cell_tag_name",
+            help="Name of the cell tag to add (default: 'CB')",
+        ),
+    ] = "CB",
+    cell_tag: Annotated[
+        str | None,
+        Parameter(
+            name="--cell_tag",
+            help="Value of the cell tag to add (default: None)",
+        ),
+    ] = None,
+) -> None:
+    """
+    Dispatch to add_tags or add_tags_wo_fastq based on presence of --index_fastq.
 
-    if args.index_fastq is None:
+    All existing comments and logic are preserved.
+    """
+    if index_fastq is None:
         add_tags_wo_fastq(
             sam_stream=sys.stdin,
-            output_bam=args.output,
-            cell_tag_name=args.cell_tag_name,
-            cell_tag=args.cell_tag,
+            output_bam=output or "-",
+            cell_tag_name=cell_tag_name,
+            cell_tag=cell_tag,
         )
     else:
-        # Run the tag-adding function with stdin for SAM
         add_tags(
             sam_stream=sys.stdin,
-            fastq_file=args.index_fastq,
-            output_bam=args.output,
-            cell_tag_name=args.cell_tag_name,
-            cell_tag=args.cell_tag,
+            fastq_file=index_fastq,
+            output_bam=output or "-",
+            cell_tag_name=cell_tag_name,
+            cell_tag=cell_tag,
         )
 
 
 if __name__ == "__main__":
-    main()
+    app()

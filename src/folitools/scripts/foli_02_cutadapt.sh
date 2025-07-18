@@ -3,7 +3,7 @@
 set -euo pipefail
 ulimit -n 1000000
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$script_dir/utils.sh"
 
 FASTP_DIR=./fastp  # input
@@ -14,15 +14,8 @@ GLOB_PATTERN="${1:-*_1.fq.gz}"  # Default if not provided
 ADAPTER_DIR="${2:-./data}"
 THREADS="${3:-16}"
 
-############################################
-# Create output directories if needed
-############################################
 mkdir -p $REST_DIR $REST_NONDIMER_DIR
 
-############################################
-# Main loop over paired-end FASTQs in ./fastp
-############################################
-# UCLA IBD panel
 fqr1s=$(ls "$FASTP_DIR"/$GLOB_PATTERN)
 i=0
 for fqR1 in $fqr1s; do

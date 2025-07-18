@@ -22,5 +22,9 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
+
 [project.scripts]
 foli = "folitools.cli:app"
+
+[tool.uv]
+package = true

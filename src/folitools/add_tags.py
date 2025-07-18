@@ -48,7 +48,9 @@ def add_tags_wo_fastq(
 
     with sam_in, bam_out:
         for read in sam_in:
-            read_name, seq1, seq2 = read.query_name.split("_")
+            query_name = read.query_name
+            assert query_name is not None, "Missing query name in read"
+            read_name, seq1, seq2 = query_name.split("_")
             if read.is_read1:
                 read.set_tag(umi_tag_s_name, seq1, value_type="Z")
             else:

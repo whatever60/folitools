@@ -1,9 +1,12 @@
 import sys
 import gzip
 import argparse
+from typing import Generator, TextIO
 
 
-def read_interleaved_fastq(fastq_stream) -> tuple[str, str, str, str, str, str]:
+def read_interleaved_fastq(
+    fastq_stream,
+) -> Generator[tuple[str, str, str, str, str, str], None, None]:
     while True:
         header_1 = fastq_stream.readline().strip()
         if not header_1:
@@ -21,7 +24,7 @@ def read_interleaved_fastq(fastq_stream) -> tuple[str, str, str, str, str, str]:
 
 
 def add_umi(
-    fastq_stream: sys.stdin,
+    fastq_stream: TextIO,
     output_fastq_1: str,  # assumed to be gzipped
     output_fastq_2: str,  # assumed to be gzipped
     sep="_",
@@ -59,8 +62,9 @@ def add_umi(
 
             new_id_1 = sep.join([read_id_1, umi_1, umi_2])
             new_id_2 = sep.join([read_id_2, umi_1, umi_2])
-            new_comment_1 = adapter_1
-            new_comment_2 = adapter_2
+            # new_comment_1 = adapter_1
+            # new_comment_2 = adapter_2
+            new_comment = f"{adapter_1}+{adapter_2}"
 
             new_seq_1 = seq_1[len(umi_1) :]
             new_seq_2 = seq_2[len(umi_2) :]
@@ -68,7 +72,7 @@ def add_umi(
             new_qual_2 = qual_2[len(umi_2) :]
 
             print(
-                f"{new_id_1} {new_comment_1}",
+                f"{new_id_1} {new_comment}",
                 new_seq_1,
                 "+",
                 new_qual_1,
@@ -76,7 +80,7 @@ def add_umi(
                 file=out_fastq_1,
             )
             print(
-                f"{new_id_2} {new_comment_2}",
+                f"{new_id_2} {new_comment}",
                 new_seq_2,
                 "+",
                 new_qual_2,

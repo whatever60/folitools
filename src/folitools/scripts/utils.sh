@@ -22,7 +22,7 @@ run_seqkit_stats() {
     fi
 
     if [[ -f "$stats_file" ]]; then
-        echo "Output file '$stats_file' already exists. Skipping seqkit stats."
+        echo "Warning: Stats file '$stats_file' already exists. Skipping seqkit stats."
     else
         seqkit stats --all --tabular --threads "${THREADS:-1}" "${fastq_files[@]}" > "$stats_file"
     fi
@@ -31,6 +31,8 @@ run_seqkit_stats() {
 
 run_fastqc() {
     # Usage: run_fastqc <trimmed_R1> <trimmed_R2> <output_dir> <threads>
+    # This function effectively just checks if the files are empty and runs fastqc if 
+    # they are not, as fastqc will raise error upon empty files.
     local trimmed_R1="$1"
     local trimmed_R2="$2"
     local output_dir="$3"
@@ -42,6 +44,7 @@ run_fastqc() {
         return 1
     fi
 
+    flag=1
     for file in "$trimmed_R1" "$trimmed_R2"; do
         if [[ ! -f "$file" ]]; then
             echo "Error: File '$file' does not exist." >&2
@@ -50,16 +53,19 @@ run_fastqc() {
 
         if file "$file" | grep -q 'gzip compressed'; then
             if zcat "$file" | head -c1 | grep -q .; then
-                echo "Warning: File '$file' is compressed but has no content. Skipping FastQC." >&2
-                return
+                flag=0
             fi
         else
             if head -c1 "$file" | grep -q .; then
-                echo "Warning: File '$file' is uncompressed and empty. Skipping FastQC." >&2
-                return
+                flag=0
             fi
         fi
     done
+
+    if [[ $flag -eq 1 ]]; then
+        echo "Warning: File '$file' is empty. Skipping FastQC." >&2
+        return
+    fi
 
     # Run FastQC
     fastqc -t "$threads" -o "$output_dir" "$trimmed_R1" "$trimmed_R2" &> /dev/null

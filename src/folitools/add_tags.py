@@ -1,31 +1,11 @@
 import sys
-import gzip
 from typing import Annotated, TextIO
 
 import pysam
-from Bio import SeqIO
-from tqdm.auto import tqdm
 from cyclopts import App, Parameter
 
 
 app = App()
-
-
-def _get_fastq_id_seq_interleaved(
-    fastq_iter,
-) -> tuple[str, str, str] | tuple[None, str, str]:
-    fastq_record1 = next(fastq_iter, None)
-    fastq_record2 = next(fastq_iter, None)
-    if fastq_record1 is None:
-        return None, "", ""
-    else:
-        if fastq_record2 is None:
-            raise ValueError("Second FASTQ record is missing")
-        if not fastq_record1.id == fastq_record2.id:
-            raise ValueError(
-                f"Interleaved FASTQ records do not match: {fastq_record1.id} != {fastq_record2.id}"
-            )
-        return fastq_record1.id, str(fastq_record1.seq), str(fastq_record2.seq)
 
 
 def add_tags_wo_fastq(

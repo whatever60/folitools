@@ -16,4 +16,5 @@ dependencies:
   - seqkit
   - fastqc
   - subread
+  - sambamba
   - pigz

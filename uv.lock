@@ -228,7 +228,7 @@ wheels = [
 [[package]]
 name = "folitools"
 version = "0.2.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "biopython" },
     { name = "cyclopts" },

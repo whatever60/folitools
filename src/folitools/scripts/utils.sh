@@ -49,12 +49,12 @@ run_fastqc() {
         fi
 
         if file "$file" | grep -q 'gzip compressed'; then
-            if ! zcat "$file" | grep -q .; then
+            if zcat "$file" | head -c1 | grep -q .; then
                 echo "Warning: File '$file' is compressed but has no content. Skipping FastQC." >&2
                 return
             fi
         else
-            if ! grep -q . "$file"; then
+            if head -c1 "$file" | grep -q .; then
                 echo "Warning: File '$file' is uncompressed and empty. Skipping FastQC." >&2
                 return
             fi

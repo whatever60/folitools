@@ -5,12 +5,9 @@ set -euo pipefail
 BAM_DIR="./star_bam"  # input
 FEATURECOUNTS_DIR="./featurecounts"
 COUNTS_DIR="./counts"
-# GTF="$HOME/data/gencode/Gencode_mouse/release_M32/gencode.vM32.primary_assembly.annotation.gtf.gz"
-# GTF="$HOME/data/gencode/Gencode_human/release_46/gencode.v46.primary_assembly.annotation.gtf.gz"
-THREADS=16
 
-GLOB_PATTERN="${1:-*.bam}"                               # Optional BAM glob
-GTF="${2:?Usage: $0 [BAM_PATTERN] GTF_PATH}"             # Required GTF file path
+GLOB_PATTERN="${1:-*.bam}"
+THREADS="${2:-16}"
 
 ############################################
 # Create output directories if needed
@@ -28,15 +25,21 @@ for star_bam in $bams; do
     sample_name="${base_name%%_*}"
     echo "Processing sample: $sample_name"
 
+    # -T: Number of threads
     # -p: sequencing data is paired-end
     # -B: Only count reads that are properly paired
     # -C: Do not count read pairs that have two ends mapping to different chromosomes or 
     # mapping to the same chromosome but on different strands.
+    # arguments that might be relevant but we leave as default:
+    # -s 0: Strand specificity (0 = unstranded, 1 = stranded, 2 = reversely stranded)
+    # -t exon: Use exon feature type for counting
+    # -g gene_id: Use gene_id attribute for counting
     featureCounts \
         -T "$THREADS" \
         -a "$GTF" \
         -o "$FEATURECOUNTS_DIR/${sample_name}" \
         -p -B -C \
+        --donotsort \
         -R BAM \
         -Rpath "$FEATURECOUNTS_DIR/${sample_name}.bam" \
         "$BAM_DIR/${sample_name}.bam" 2> $FEATURECOUNTS_DIR/$sample_name.log

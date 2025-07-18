@@ -43,7 +43,7 @@ def qc(
 
 
 @app.command(help="Run cutadapt demultiplexing")
-def assign_probe(
+def assign_probes(
     *,
     pattern: Annotated[
         str, Parameter(help="Glob pattern for R1 FASTQ files from fastp output")

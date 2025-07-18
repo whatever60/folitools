@@ -44,24 +44,23 @@ fi
 
 # --- Directory Setup ---
 REST_DIR="./rest"
-STAR_DIR="./star_bam"
+STAR_DIR="./star"
 FEATURECOUNTS_DIR="./featurecounts"
-COUNTS_DIR="./counts"
 
 echo "Creating output directories..."
-mkdir -p "$STAR_DIR" "$FEATURECOUNTS_DIR" "$COUNTS_DIR"
+mkdir -p "$STAR_DIR" "$FEATURECOUNTS_DIR"
 
 # --- Dynamic Core Allocation ---
 read STAR_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((CORES - 1))")
-echo " -> STAR Threads: $STAR_THREADS"
-echo " -> featureCounts Threads: $FC_THREADS"
+echo "Core allocation -> STAR: $STAR_THREADS; featureCounts: $FC_THREADS"
 
 # --- Pre-load STAR Genome Index ---
 echo "Loading STAR genome into memory..."
 STAR --runThreadN "$STAR_THREADS" \
     --genomeDir "$STAR_INDEX" \
     --genomeLoad LoadAndExit \
-    --outFileNamePrefix _temp/
+    --outFileNamePrefix _temp/ \
+    > /dev/null
 rm -rf _temp
 
 fqr1s=$(ls "$REST_DIR"/$GLOB_PATTERN)
@@ -84,14 +83,16 @@ for fqR1 in $fqr1s; do
     fi
     echo "Processing sample: $sample_name"
 
-
+    # About STAR arguments:
+    # --outSAMtype BAM or other BAM types are only compatible with --outSAMorder Paired.
+    #   So we will leave it as this default.
     # About featureCounts arguments:
     # -T: Number of threads
     # -p: sequencing data is paired-end
     # -B: Only count reads that are properly paired
     # -C: Do not count read pairs that have two ends mapping to different chromosomes or 
-    # mapping to the same chromosome but on different strands.
-    # arguments that might be relevant but we leave as default:
+    #   mapping to the same chromosome but on different strands.
+    # Arguments that might be relevant but we leave as default:
     # -s 0: Strand specificity (0 = unstranded, 1 = stranded, 2 = reversely stranded)
     # -t exon: Use exon feature type for counting
     # -g gene_id: Use gene_id attribute for counting
@@ -108,10 +109,10 @@ for fqR1 in $fqr1s; do
         --outSAMunmapped Within \
         --chimOutType WithinBAM \
         --outSAMmode Full \
-        --outSAMtype BAM Unsorted \
-        --outSAMorder PairedKeepInputOrder \
-        --outBAMcompression 1 \
+        --outSAMtype None \
+        --outSAMorder Paired \
         --outStd BAM_Unsorted \
+        --outBAMcompression 1 \
         --outTmpKeep None \
         --quantMode GeneCounts | \
         python -m folitools.add_tags \
@@ -119,7 +120,7 @@ for fqR1 in $fqr1s; do
         featureCounts \
             -T "$FC_THREADS" \
             -a "$GTF_PATH" \
-            -o "$COUNTS_DIR/${sample_name}.txt" \
+            -o "$FEATURECOUNTS_DIR/${sample_name}.txt" \
             -p -B -C \
             --donotsort \
             -R BAM \
@@ -142,7 +143,8 @@ STAR \
     --runThreadN "$STAR_THREADS" \
     --genomeDir "$STAR_INDEX" \
     --genomeLoad Remove \
-    --outFileNamePrefix _temp/
+    --outFileNamePrefix _temp/ \
+    2> /dev/null
 rm -rf _temp
 
 echo "Pipeline finished successfully."

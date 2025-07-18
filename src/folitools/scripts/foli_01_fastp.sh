@@ -9,9 +9,9 @@ FASTQ_DIR="./fastq"
 FASTQ_FASTQC_DIR="./fastq_fastqc"
 FASTP_DIR="./fastp"
 FASTP_FASTQC_DIR="./fastp_fastqc"
-THREADS=8
 
 GLOB_PATTERN="${1:-*_R1_*.fastq.gz}"  # Use first argument if given, otherwise default
+THREADS="${2:-16}"
 
 mkdir -p "$FASTQ_DIR" "$FASTQ_FASTQC_DIR" "$FASTP_DIR" "$FASTP_FASTQC_DIR"
 
@@ -36,10 +36,10 @@ for fqR1 in $fqr1s; do
     trimmed_R2="$FASTP_DIR/${sample_name}_2.fq.gz"
 
     # skip if "$FASTP_DIR/${sample_name}_1.fq.gz" already exists
-    if [[ -f "$trimmed_R1" && -f "$trimmed_R2" ]]; then
-        echo "Skipping already processed sample: $sample_name"
-        continue
-    fi
+    # if [[ -f "$trimmed_R1" && -f "$trimmed_R2" ]]; then
+    #     echo "Skipping already processed sample: $sample_name"
+    #     continue
+    # fi
 
     # Skip if no matching R2
     if [[ ! -f "$fqR2" ]]; then
@@ -47,6 +47,8 @@ for fqR1 in $fqr1s; do
         continue
     fi
     echo "Processing sample: $sample_name"
+
+    run_fastqc "$fqR1" "$fqR2" "$FASTP_FASTQC_DIR" "$THREADS"
 
     # Run fastqc "$fqR1" "$fqR2" "$FASTQ_FASTQC_DIR" "$THREADS"
     # No need for poly-G or TruSeq adapter trimming, fastp trimming by overlapp analysis is good enough. 

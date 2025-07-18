@@ -16,30 +16,29 @@ Then manually install the required bioinformatics tools via conda:
 
 ```bash
 conda install -c bioconda -c conda-forge \
-  fastp cutadapt samtools bwa-mem2 star seqkit fastqc subread pigz
+  fastp cutadapt samtools bwa-mem2 star seqkit fastqc subread sambamba pigz
 ```
 
 ## Usage
 
-Each stage of the pipeline is exposed as a command via `foli <stage>`, which wraps the corresponding shell script. Arguments are passed directly to the underlying `.sh` scripts and behave as positional arguments (not keyword-style flags).
+Each stage of the pipeline is exposed as a command via `foli <subcommand>`, which wraps the corresponding shell script. The CLI uses explicit arguments with proper help documentation.
 
-⚠️ The current working directory (`pwd`) is treated as the working environment. All outputs will be written to subdirectories (e.g. `./fastp/`, `./star_bam/`, `./counts/`), and required input files must be present or referenced relative to this directory.
+⚠️ The current working directory (`pwd`) is treated as the working environment. All outputs will be written to subdirectories (e.g. `./fastp/`, `./featurecounts/`, `./counts/`), and required input files must be present or referenced relative to this directory.
 
 ### Expected Inputs
 
 - `./fastq/`: directory containing raw paired-end FASTQ files
   - Files should follow the naming pattern `*_R1_*.fastq.gz` and `*_R2_*.fastq.gz`
-- `primer.fasta` or similar: barcode or primer file (used in `cutadapt`)
-- `transcript.fa`: reference transcriptome FASTA (for index building or annotation)
-- `annotation.gtf`: gene annotation file (used in `foli count`)
-- STAR genome index directory: passed as an argument to `foli map`
+- `./data/`: directory containing adapter FASTA files (named as `i5_short.fasta` and `i7_short.fasta`)
+- STAR genome index directory
+- GTF annotation file
 
-All other intermediate and output directories (`./fastp/`, `./rest/`, `./star/`, etc.) are automatically created if they don’t exist.
+All the output directories (`./fastp/`, `./rest/`, `./featurecounts/`, etc.) are automatically created in the current working directory if they don't exist.
 
 ### Step 1. Preprocessing
 
 ```bash
-foli fastp
+foli qc
 ```
 
 This command performs quality control and read trimming using `fastqc`, `seqkit`, and `fastp`.
@@ -50,69 +49,69 @@ Outputs include:
 - FastQC reports in `./fastq_fastqc/` and `./fastp_fastqc/`
 - Summary statistics in `fastq.stats` and `fastp.stats`
 
-You can optionally restrict processing to a subset of samples by providing a custom glob pattern:
+Note that input FASTQ files are assumed to be paired-end. Read 1 pattern is provided to the script by users and files of read 2 will be automatically derived from read 1. This is also true for the following steps.
 
+Optionally, you can restrict processing to a subset of samples by providing a custom glob pattern.
+
+For example:
 ```bash
-foli fastp 'prefixabc*_R1_*.fastq.gz'
+foli fastp 'sample-A*_R1_*.fastq.gz'
 ```
 
-### Step 2. Primer Trimming
+### Step 2. Probe assignment
 
 ```bash
-foli cutadapt
+foli assign-probes
 ```
 
 This command performs primer or adapter trimming using `cutadapt`. It processes reads from the `./fastp/` directory and writes output FASTQs to `./rest/` and `./rest_all/`. Primer or barcode sequences should be provided as FASTA files in `./data/` by default.
 
-You can optionally:
-- Specify a custom glob pattern to restrict which files are processed (e.g. `'sample*_1.fq.gz'`)
-- Provide a different adapter directory (e.g. `./barcodes/`)
+Optionally, you can:
+- Specify a custom glob pattern to restrict which files are processed (e.g. `'sample_A*_1.fq.gz'`)
+- Provide a different adapter directory (e.g. `./barcodes`)
 
-Example:
+For example:
 ```bash
-foli cutadapt 'sample*_1.fq.gz' ./barcodes/
+foli cutadapt --pattern 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --threads 8
 ```
 
-### Step 3. Mapping
+### Step 3. Mapping and Feature Counting
 
 ```bash
-foli map STAR_INDEX_PATH
+foli map --star-index STAR_INDEX_PATH --gtf GTF_PATH
 ```
 
-This command aligns reads to a genome using STAR. It expects paired-end FASTQs in `./rest/`, and writes sorted BAM files to `./star_bam/`.
+This command aligns reads to a genome using `STAR` and assigns transcripts using `featureCounts`. It expects paired-end FASTQs in `./rest/`, and writes `STAR` output to `./star/` and `featureCounts` output (sorted BAM files and count tables) to `./featurecounts/`.
 
-The first argument must be the path to an existing STAR index directory.
+Optionally, you can provide a glob pattern to filter input files.
 
-You can optionally provide a glob pattern to filter input reads:
-
+For example:
 ```bash
-foli map 'sample*_1.fq.gz' ./star_index/
+foli map --pattern 'sample-A*_1.fq.gz' --star-index STAR_INDEX_PATH --gtf GTF_PATH
 ```
 
 ### Step 4. Gene Counting
 
 ```bash
-foli count GTF_PATH
+foli count
 ```
 
-This command runs `featureCounts` on BAM files in `./star_bam/` and outputs read count tables to `./featurecounts/` and `./counts/`.
+This command runs `umi_tools` on BAM files in `./featurecounts/` and outputs read count tables to `./counts/`.
 
-The first argument is the path to a GTF annotation file.
+Optionally, you can provide a glob pattern to restrict input BAMs.
 
-To restrict input BAMs, you can provide an optional glob pattern as the first argument and move the GTF path to the second position:
-
+For example:
 ```bash
-foli count 'sample*.bam' ./annotation.gtf
+foli count --pattern 'sample-A*.bam'
 ```
 
-## Output
+## Output Structure
 
 Each stage writes outputs to stage-specific subdirectories:
 
-| Stage      | Output Directory            |
-|------------|-----------------------------|
-| fastp      | `./fastp/`, `./fastp_fastqc/` |
-| cutadapt   | `./rest/`, `./rest_all/`     |
-| map        | `./star/`, `./star_bam/`     |
-| count      | `./featurecounts/`, `./counts/` |
-
+| Stage      | Output Directories                    | Key Files |
+|------------|---------------------------------------|-----------|
+| fastp      | `./fastp/`, `./fastp_fastqc/`        | Trimmed FASTQ files, QC reports |
+| cutadapt   | `./rest_all/`, `./rest/`             | Adapter-trimmed reads, UMI-tagged |
+| map        | `./star/`, `./featurecounts/`        | Alignments, sorted BAM files |
+| count      | `./counts/`                          | UMI count matrices, grouped BAMs |

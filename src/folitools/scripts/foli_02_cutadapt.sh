@@ -9,10 +9,10 @@ source "$script_dir/utils.sh"
 FASTP_DIR=./fastp  # input
 REST_DIR="./rest_all"
 REST_NONDIMER_DIR="./rest"
-THREADS=16
 
 GLOB_PATTERN="${1:-*_1.fq.gz}"  # Default if not provided
 ADAPTER_DIR="${2:-./data}"
+THREADS="${3:-16}"
 
 ############################################
 # Create output directories if needed
@@ -43,12 +43,12 @@ for fqR1 in $fqr1s; do
     echo "Processing sample: $sample_name"
 
     cutadapt \
-        -j 8 \
-        -e 2 \
+        -j "$THREADS" \
+        -e 0.1 \
         -g "file:$ADAPTER_DIR/i5_short.fasta;min_overlap=20" \
         -G "file:$ADAPTER_DIR/i7_short.fasta;min_overlap=20" \
         --rename '{id} {adapter_name} {match_sequence}' \
-        --action=none \
+        --action none \
         --interleaved \
         -o - \
         "$fqR1" "$fqR2" \
@@ -60,7 +60,7 @@ for fqR1 in $fqr1s; do
     # Remove reads that are too short or have name containing "no_adapter" (these are 
     # considered primer dimers)
     cutadapt \
-        -j 8 \
+        -j "$THREADS" \
         --minimum-length 60:60 \
         -o \
             >(paste - - - - \
@@ -75,7 +75,7 @@ for fqR1 in $fqr1s; do
             | gzip \
             > "$REST_NONDIMER_DIR/${sample_name}_2.fq.gz") \
         "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
-        2> /dev/null > /dev/null
+        &> /dev/null
 done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 run_seqkit_stats "$REST_DIR"

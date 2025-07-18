@@ -1,7 +1,8 @@
 import sys
 import gzip
-import argparse
-from typing import Generator, TextIO
+from typing import Generator, TextIO, Annotated
+
+from cyclopts import Parameter, run
 
 
 def read_interleaved_fastq(
@@ -27,7 +28,7 @@ def add_umi(
     fastq_stream: TextIO,
     output_fastq_1: str,  # assumed to be gzipped
     output_fastq_2: str,  # assumed to be gzipped
-    sep="_",
+    sep: str = "_",
 ):
     with (
         gzip.open(output_fastq_1, "wt") as out_fastq_1,
@@ -89,25 +90,26 @@ def add_umi(
             )
 
 
+def main(
+    o1: Annotated[
+        str,
+        Parameter(help="Output FASTQ file for read 1 (gzipped)"),
+    ],
+    o2: Annotated[
+        str,
+        Parameter(help="Output FASTQ file for read 2 (gzipped)"),
+    ],
+):
+    """
+    Add UMI to FASTQ records from stdin and write to output files.
+
+    Args:
+        o1: Output FASTQ file for read 1 (gzipped).
+        o2: Output FASTQ file for read 2 (gzipped).
+        sep: Separator between read ID and UMIs.
+    """
+    add_umi(fastq_stream=sys.stdin, output_fastq_1=o1, output_fastq_2=o2)
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Add UMI to FASTQ records from stdin and write to output files."
-    )
-    parser.add_argument(
-        "--o1",
-        type=str,
-        required=True,
-        help="Output FASTQ file for read 1.",
-    )
-    parser.add_argument(
-        "--o2",
-        type=str,
-        required=True,
-        help="Output FASTQ file for read 2.",
-    )
-    args = parser.parse_args()
-    add_umi(
-        fastq_stream=sys.stdin,
-        output_fastq_1=args.o1,
-        output_fastq_2=args.o2,
-    )
+    run(main)

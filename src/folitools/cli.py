@@ -57,7 +57,7 @@ def assign_probes(
     run("foli_02_cutadapt.sh", (pattern, adapter_dir, str(cores)))
 
 
-@app.command(name="map", help="Run mapping step")
+@app.command(help="Run mapping step")
 def map_(
     *,
     pattern: Annotated[

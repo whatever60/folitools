@@ -1,5 +1,6 @@
 import sys
-from typing import Annotated, TextIO
+import io
+from typing import Annotated
 
 import pysam
 from cyclopts import App, Parameter
@@ -9,8 +10,8 @@ app = App()
 
 
 def add_tags_wo_fastq(
-    sam_stream: TextIO,
-    output_bam: str,
+    bam_input: str,
+    bam_output: str,
     umi_tag_s_name: str = "US",  # single-read UMI
     umi_tag_p_name: str = "UP",  # concatenated UMI from paired reads
     cell_tag_name: str = "CB",
@@ -29,8 +30,8 @@ def add_tags_wo_fastq(
         appropriately.
 
     Args:
-        sam_stream: Standard input stream for SAM data.
-        output_bam: Path to the output BAM file ('-' or None for stdout).
+        bam_input: Standard input stream for SAM data.
+        bam_output: Path to the output BAM file ('-' or None for stdout).
         umi_tag_s_name: Name of the single-read UMI tag (default: 'US').
         umi_tag_p_name: Name of the paired-read UMI tag (default: 'UP').
         cell_tag_name: Name of the cell barcode tag (default: 'CB').
@@ -38,15 +39,37 @@ def add_tags_wo_fastq(
         cell_tag: Optional cell barcode value to add to every read.
         umi_length: Expected length of each individual UMI (default: 6).
     """
-    # open the SAM input
-    sam_in = pysam.AlignmentFile(sam_stream, "r")
-    # decide BAM output
-    if output_bam in (None, "-"):
-        bam_out = pysam.AlignmentFile("-", "wb0", header=sam_in.header)
-    else:
-        bam_out = pysam.AlignmentFile(output_bam, "wb", header=sam_in.header)
+    if bam_input == "-":
+        # Peek at stdin to determine if it's BAM or SAM
+        initial_bytes = sys.stdin.buffer.read(4)
+        is_bam = initial_bytes.startswith(b"BAM\x01")
+        # Try to seek back if possible
+        if sys.stdin.buffer.seekable():
+            sys.stdin.buffer.seek(-len(initial_bytes), 1)
+            input_ = sys.stdin.buffer
+        else:
+            # Create a file-like object that prepends the already-read bytes
+            input_ = io.BytesIO(initial_bytes + sys.stdin.buffer.read())
+    else:  # An actual file path
+        with open(bam_input, "rb") as f:
+            is_bam = f.read(4).startswith(b"BAM\x01")
+        input_ = bam_input
+    mode_in = "rb" if is_bam else "r"
 
-    with sam_in, bam_out:
+    mode_out = "w"
+    if bam_output == "-":
+        mode_out = "wb0"  # same as wbu, i.e., uncompressed BAM
+    elif bam_output.endswith("bam"):
+        mode_out = "wb"
+    elif bam_output.endswith("sam"):
+        mode_out = "w"
+    else:
+        raise ValueError("Output file must end with .bam or .sam")
+
+    with (
+        pysam.AlignmentFile(input_, mode_in) as sam_in,
+        pysam.AlignmentFile(bam_output, mode_out, header=sam_in.header) as bam_out,
+    ):
         for read in sam_in:
             query_name = read.query_name
             assert query_name is not None, "Missing query name in read"
@@ -69,18 +92,19 @@ def add_tags_wo_fastq(
             # Add the cell tag
             if cell_tag:
                 read.set_tag(cell_tag_name, cell_tag, value_type="Z")
+            print(query_name, file=sys.stderr)
             bam_out.write(read)
 
 
 @app.command(help="Add UMI and cell tags to BAM file from FASTQ sequences.")
 def main(
     output: Annotated[
-        str | None,
+        str,
         Parameter(
             name=["--output", "-o"],
             help="Path to the output BAM file ('-' or omit for stdout)",
         ),
-    ] = None,
+    ] = "-",
     cell_tag_name: Annotated[
         str,
         Parameter(
@@ -102,11 +126,12 @@ def main(
     All existing comments and logic are preserved.
     """
     add_tags_wo_fastq(
-        sam_stream=sys.stdin,
-        output_bam=output or "-",
+        bam_input="-",
+        bam_output=output,
         cell_tag_name=cell_tag_name,
         cell_tag=cell_tag,
     )
+
 
 if __name__ == "__main__":
     app()

@@ -27,8 +27,8 @@ def run(script_name: str, args: tuple) -> None:
 @app.command(help="Run fastp preprocessing")
 def qc(
     *,
-    pattern: Annotated[
-        str, Parameter(help="Glob pattern for input FASTQ files")
+    input_: Annotated[
+        str, Parameter(help="pattern for input FASTQ files")
     ] = "*_R1_*.fastq.gz",
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ) -> None:
@@ -39,14 +39,14 @@ def qc(
         cores: Number of CPU cores to allocate for fastp.
     """
     # pass the core count as the only argument to your shell script
-    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (pattern, cores))
+    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_, cores))
 
 
 @app.command(help="Run cutadapt demultiplexing")
 def assign_probes(
     *,
-    pattern: Annotated[
-        str, Parameter(help="Glob pattern for R1 FASTQ files from fastp output")
+    input_: Annotated[
+        str, Parameter(help="pattern for R1 FASTQ files from fastp output")
     ] = "*_1.fq.gz",
     adapter_dir: Annotated[
         Path, Parameter(help="Directory containing adapter FASTA files")
@@ -54,17 +54,17 @@ def assign_probes(
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ):
     """Run the cutadapt step of the pipeline."""
-    run("foli_02_cutadapt.sh", (pattern, adapter_dir, str(cores)))
+    run("foli_02_cutadapt.sh", (input_, adapter_dir, str(cores)))
 
 
 @app.command(help="Run mapping step")
 def map_(
     *,
-    pattern: Annotated[
+    input_: Annotated[
         str,
         Parameter(
-            "--pattern",
-            help="Optional glob pattern for R1 FASTQ files (default: '*_1.fq.gz').",
+            "--input_",
+            help="Optional pattern for R1 FASTQ files (default: '*_1.fq.gz').",
         ),
     ] = "*_1.fq.gz",
     star_index: Annotated[
@@ -99,8 +99,8 @@ def map_(
             str(star_index),
             "--gtf",
             str(gtf),
-            "--pattern",
-            pattern,
+            "--input_",
+            input_,
         ),
     )
 
@@ -108,11 +108,11 @@ def map_(
 @app.command(help="Run read counting")
 def count(
     *,
-    pattern: Annotated[str, Parameter(help="Glob pattern for BAM files")] = "*.bam",
+    input_: Annotated[str, Parameter(help="pattern for BAM files")] = "*.bam",
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ):
     """Run the counting step of the pipeline."""
-    run("foli_04_count.sh", (pattern, str(cores)))
+    run("foli_04_count.sh", (input_, str(cores)))
 
 
 if __name__ == "__main__":

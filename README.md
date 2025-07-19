@@ -55,7 +55,7 @@ Optionally, you can restrict processing to a subset of samples by providing a cu
 
 For example:
 ```bash
-foli fastp 'sample-A*_R1_*.fastq.gz'
+foli qc --input 'sample-A*_R1_*.fastq.gz'
 ```
 
 ### Step 2. Probe assignment
@@ -72,7 +72,7 @@ Optionally, you can:
 
 For example:
 ```bash
-foli cutadapt --pattern 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --threads 8
+foli assing-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --threads 8
 ```
 
 ### Step 3. Mapping and Feature Counting
@@ -87,7 +87,7 @@ Optionally, you can provide a glob pattern to filter input files.
 
 For example:
 ```bash
-foli map --pattern 'sample-A*_1.fq.gz' --star-index STAR_INDEX_PATH --gtf GTF_PATH
+foli map --input 'sample-A*_1.fq.gz' --star-index STAR_INDEX_PATH --gtf GTF_PATH
 ```
 
 ### Step 4. Gene Counting
@@ -102,7 +102,7 @@ Optionally, you can provide a glob pattern to restrict input BAMs.
 
 For example:
 ```bash
-foli count --pattern 'sample-A*.bam'
+foli count --input 'sample-A*.bam'
 ```
 
 ## Output Structure
@@ -115,3 +115,10 @@ Each stage writes outputs to stage-specific subdirectories:
 | cutadapt   | `./rest_all/`, `./rest/`             | Adapter-trimmed reads, UMI-tagged |
 | map        | `./star/`, `./featurecounts/`        | Alignments, sorted BAM files |
 | count      | `./counts/`                          | UMI count matrices, grouped BAMs |
+
+
+## TODO
+
+- Add QC report code
+- Add count matrix generation code and basic analysis
+- Move mapping reads filtering to map instead of in probe assignment. And remove filtering by "no_adapter" in read name.

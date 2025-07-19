@@ -50,25 +50,25 @@ for fqR1 in $fqr1s; do
             --o1 "$REST_DIR/${sample_name}_1.fq.gz" \
             --o2 "$REST_DIR/${sample_name}_2.fq.gz"
 
-    # Remove reads that are too short or have name containing "no_adapter" (these are 
-    # considered primer dimers)
-    cutadapt \
-        -j "$THREADS" \
-        --minimum-length 60:60 \
-        -o \
-            >(paste - - - - \
-            | grep -v 'no_adapter' \
-            | tr '\t' '\n' \
-            | gzip \
-            > "$REST_NONDIMER_DIR/${sample_name}_1.fq.gz") \
-        -p \
-            >(paste - - - - \
-            | grep -v 'no_adapter' \
-            | tr '\t' '\n' \
-            | gzip \
-            > "$REST_NONDIMER_DIR/${sample_name}_2.fq.gz") \
-        "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
-        &> /dev/null
+    # # Remove reads that are too short or have name containing "no_adapter" (these are 
+    # # considered primer dimers)
+    # cutadapt \
+    #     -j "$THREADS" \
+    #     --minimum-length 60:60 \
+    #     -o \
+    #         >(paste - - - - \
+    #         | grep -v 'no_adapter' \
+    #         | tr '\t' '\n' \
+    #         | gzip \
+    #         > "$REST_NONDIMER_DIR/${sample_name}_1.fq.gz") \
+    #     -p \
+    #         >(paste - - - - \
+    #         | grep -v 'no_adapter' \
+    #         | tr '\t' '\n' \
+    #         | gzip \
+    #         > "$REST_NONDIMER_DIR/${sample_name}_2.fq.gz") \
+    #     "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
+    #     &> /dev/null
 done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 run_seqkit_stats "$REST_DIR"

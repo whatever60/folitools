@@ -14,15 +14,16 @@ THREADS="${2:-16}"
 ############################################
 mkdir -p "$COUNTS_DIR"
 
-bams=$(ls "$FEATURECOUNTS_DIR/$GLOB_PATTERN")
+bams=$(ls "$FEATURECOUNTS_DIR"/$GLOB_PATTERN)
 i=0
 for star_bam in $bams; do
     ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
     # fi
-    base_name=$(basename $star_bam .bam)
-    sample_name="${base_name%%_*}"
+    # split by dot to get the sample name
+    base_bam=$(basename "$star_bam" .bam)
+    sample_name="${base_bam%%.*}"
     echo "Processing sample: $sample_name"
 
     umi_tools count \

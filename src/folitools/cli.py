@@ -89,7 +89,7 @@ def map_(
         ),
     ] = 8,
 ):
-    """Run the mapping step of the pipeline."""
+    """Run the mapping step of the pipeline. Includes read filtering to remove short reads (primer dimers)."""
     run(
         "foli_03_map.sh",
         (

@@ -8,13 +8,13 @@ source "$script_dir/utils.sh"
 
 FASTP_DIR=./fastp  # input
 REST_DIR="./rest_all"
-REST_NONDIMER_DIR="./rest"
+# REST_NONDIMER_DIR="./rest"
 
 GLOB_PATTERN="${1:-*_1.fq.gz}"  # Default if not provided
 ADAPTER_DIR="${2:-./data}"
 THREADS="${3:-16}"
 
-mkdir -p $REST_DIR $REST_NONDIMER_DIR
+mkdir -p $REST_DIR
 
 fqr1s=$(ls "$FASTP_DIR"/$GLOB_PATTERN)
 i=0
@@ -72,6 +72,6 @@ for fqR1 in $fqr1s; do
 done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 run_seqkit_stats "$REST_DIR"
-run_seqkit_stats "$REST_NONDIMER_DIR"
+# run_seqkit_stats "$REST_NONDIMER_DIR"
 
 echo "Pre-STAR pipeline completed successfully!"

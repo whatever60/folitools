@@ -33,7 +33,7 @@ Each stage of the pipeline is exposed as a command via `foli <subcommand>`, whic
 - STAR genome index directory
 - GTF annotation file
 
-All the output directories (`./fastp/`, `./rest/`, `./featurecounts/`, etc.) are automatically created in the current working directory if they don't exist.
+All the output directories (`./fastp/`, `./rest_all/`, `./featurecounts/`, etc.) are automatically created in the current working directory if they don't exist.
 
 ### Step 1. Preprocessing
 
@@ -64,7 +64,9 @@ foli qc --input 'sample-A*_R1_*.fastq.gz'
 foli assign-probes
 ```
 
-This command performs primer or adapter trimming using `cutadapt`. It processes reads from the `./fastp/` directory and writes output FASTQs to `./rest/` and `./rest_all/`. Primer or barcode sequences should be provided as FASTA files in `./data/` by default.
+This command performs gene probe primer assignment and trimming using `cutadapt`. It 
+processes reads from the `./fastp/` directory and writes output FASTQs to `./rest_all/`.
+Probe primer sequences should be provided as FASTA files in `./data/` by default. A summary statistics of FASTQ files in `./rest_all` is also generated at `./rest_all.stats`.
 
 Optionally, you can:
 - Specify a custom glob pattern to restrict which files are processed (e.g. `'sample_A*_1.fq.gz'`)
@@ -72,7 +74,7 @@ Optionally, you can:
 
 For example:
 ```bash
-foli assing-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --threads 8
+foli assign-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --threads 8
 ```
 
 ### Step 3. Mapping and Feature Counting
@@ -81,7 +83,7 @@ foli assing-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --thread
 foli map --star-index STAR_INDEX_PATH --gtf GTF_PATH
 ```
 
-This command aligns reads to a genome using `STAR` and assigns transcripts using `featureCounts`. It expects paired-end FASTQs in `./rest/`, and writes `STAR` output to `./star/` and `featureCounts` output (sorted BAM files and count tables) to `./featurecounts/`.
+This command aligns reads to a genome using `STAR` and assigns transcripts using `featureCounts`. It expects paired-end FASTQs in `./rest_all/`, filters out short reads (primer dimers), and writes `STAR` output to `./star/` and `featureCounts` output (sorted BAM files and count tables) to `./featurecounts/`.
 
 Optionally, you can provide a glob pattern to filter input files.
 
@@ -112,7 +114,7 @@ Each stage writes outputs to stage-specific subdirectories:
 | Stage      | Output Directories                    | Key Files |
 |------------|---------------------------------------|-----------|
 | fastp      | `./fastp/`, `./fastp_fastqc/`        | Trimmed FASTQ files, QC reports |
-| cutadapt   | `./rest_all/`, `./rest/`             | Adapter-trimmed reads, UMI-tagged |
+| cutadapt   | `./rest_all/`                        | Adapter-trimmed reads, UMI-tagged |
 | map        | `./star/`, `./featurecounts/`        | Alignments, sorted BAM files |
 | count      | `./counts/`                          | UMI count matrices, grouped BAMs |
 
@@ -121,4 +123,3 @@ Each stage writes outputs to stage-specific subdirectories:
 
 - Add QC report code
 - Add count matrix generation code and basic analysis
-- Move mapping reads filtering to map instead of in probe assignment. And remove filtering by "no_adapter" in read name.

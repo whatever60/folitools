@@ -87,7 +87,7 @@ for fqR1 in $fqr1s; do
     # The big command below basically drops short reads using cutadapt and directly pipes its 
     # output to STAR, without saving any intermediate files.
     # FIFO files are used for communication between processes. To make it work, I had to
-    # 1. Explicitly say `exec 3<>"$FIFO_R1"` and `exec 4<>"$FIFO_R2"` after creating the FIFOs. This it 
+    # 1. Explicitly say `exec 3<>"$FIFO_R1"` and `exec 4<>"$FIFO_R2"` after creating the FIFOs. This is 
     #  to ensure that the FIFOs are opened for both reading and writing and to prevent blocking. As a
     #  result, we also need to explicitly close the FIFOs after the cutadapt command (normally the FIFO 
     #  will close when it sees EOF), so that STAR knows that the input is complete. Suprisingly, the way 

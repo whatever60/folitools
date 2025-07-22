@@ -3,16 +3,16 @@ set -euo pipefail
 
 # --- Argument Parsing ---
 # A more robust argument parsing loop
-CORES=""
+THREADS=""
 STAR_INDEX=""
 GTF_PATH=""
 GLOB_PATTERN="*_1.fq.gz" # Default pattern
 
 # A simple help message
 usage() {
-    echo "Usage: $0 --cores <int> --star-index <path> --gtf <path> [--pattern <glob>]"
+    echo "Usage: $0 --THREADS <int> --star-index <path> --gtf <path> [--pattern <glob>]"
     echo ""
-    echo "  --cores        : Total number of cores to allocate for the pipeline."
+    echo "  --THREADS        : Total number of THREADS to allocate for the pipeline."
     echo "  --star-index   : Path to the STAR genome index directory."
     echo "  --gtf          : Path to the GTF annotation file for featureCounts."
     echo "  --pattern      : Optional glob pattern for R1 FASTQ files (default: '*_1.fq.gz')."
@@ -22,7 +22,7 @@ usage() {
 # Parse named arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --cores) CORES="$2"; shift ;;
+        --cores) THREADS="$2"; shift ;;
         --star-index) STAR_INDEX="$2"; shift ;;
         --gtf) GTF_PATH="$2"; shift ;;
         --pattern) GLOB_PATTERN="$2"; shift ;;
@@ -32,7 +32,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # Check for mandatory arguments
-if [[ -z "$CORES" || -z "$STAR_INDEX" || -z "$GTF_PATH" ]]; then
+if [[ -z "$THREADS" || -z "$STAR_INDEX" || -z "$GTF_PATH" ]]; then
     echo "Error: Missing mandatory arguments."
     usage
 fi
@@ -43,20 +43,17 @@ fi
 # GTF="$HOME/data/gencode/Gencode_human/release_46/gencode.v46.primary_assembly.annotation.gtf.gz"
 
 # --- Directory Setup ---
-REST_DIR="./rest_all"
+REST_DIR="./rest_all"  # input
 STAR_DIR="./star"
 FEATURECOUNTS_DIR="./featurecounts"
 
 echo "Creating output directories..."
 mkdir -p "$STAR_DIR" "$FEATURECOUNTS_DIR"
 
-# --- Dynamic Core Allocation ---
-# read STAR_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((CORES - 2))")
-# echo "Core allocation -> STAR: $STAR_THREADS; featureCounts: $FC_THREADS"
-
 # --- Pre-load STAR Genome Index ---
 echo "Loading STAR genome into memory..."
-STAR --runThreadN "$STAR_THREADS" \
+STAR \
+    --runThreadN 1 \
     --genomeDir "$STAR_INDEX" \
     --genomeLoad LoadAndExit \
     --outFileNamePrefix _temp/ \
@@ -95,13 +92,17 @@ for fqR1 in $fqr1s; do
     #  I really don't know why.
     # 2. Run the consumer processes (STAR) first in the background (&) and then the producer (cutadapt).
     #   Otherwise, blocking still occurs, though I don't understand why.
-    # 3. Record the PID of the STAR process and wait for it to finish before removing the FIFOs and running #   next steps. Otherwise the output of STAR might be incomplete.
+    # 3. Record the PID of the STAR process and wait for it to finish before removing the FIFOs and running
+    #   next steps. Otherwise the output of STAR might be incomplete.
     # 4. Somehow cutadapt does not work well with FIFO files. That is, if I set -o and -p to FIFOs, it
     #  will just block. Instead, I let cutadapt output interleaved FASTQ to stdout and used another awk
     #  command to split it back into two FIFOs.
     # 5. FIFO file names must be explicit since STAR reads data based on file name extension. We not only
     #  need the FIFOs to be text (not gzipped), but also need to set --readFilesCommand to cat. Just
     #  setting --readFilesCommand to cat still results in error when the FIFOs are named with .gz.
+
+    # Why don't I just bypass cutadapt and use awk directly to two FIFOs lol? cutadapt 
+    # seems to be the source of the many surprises here.
 
     FIFO_R1="$FEATURECOUNTS_DIR/${sample_name}_1.fifo.fq"
     FIFO_R2="$FEATURECOUNTS_DIR/${sample_name}_2.fifo.fq"
@@ -116,7 +117,7 @@ for fqR1 in $fqr1s; do
     #   So we will leave it as this default.
     # Note that we are sorting afterwards with sambamba. So no need to sort in STAR or featureCounts.
     STAR \
-        --runThreadN "$((CORES - 1))" \
+        --runThreadN "$((THREADS - 2))" \
         --genomeDir "$STAR_INDEX" \
         --genomeLoad LoadAndKeep \
         --readFilesIn "$FIFO_R1" "$FIFO_R2" \
@@ -129,13 +130,14 @@ for fqR1 in $fqr1s; do
         --outSAMmode Full \
         --outSAMtype BAM Unsorted \
         --outSAMorder Paired \
-        --outStd BAM_Unsorted \
         --outBAMcompression 1 \
         --outTmpKeep None \
-        --quantMode GeneCounts | \
-        python -m folitools.add_tags \
-            --cell_tag ${sample_name} \
-            --output "$FEATURECOUNTS_DIR/${sample_name}.temp.bam" &
+        --quantMode GeneCounts \
+        > /dev/null &
+        #  | \
+    #     python -m folitools.add_tags \
+    #         --cell_tag ${sample_name} \
+    #         --output "$FEATURECOUNTS_DIR/${sample_name}.temp.bam" &
     star_pid=$!
     cutadapt \
         -j 1 \
@@ -181,32 +183,56 @@ for fqR1 in $fqr1s; do
     #  By default, featureCounts will sort such that paired reads are together. We here 
     #  turn on the --donotsort flag, as paired reads are already together. Even though it won't make 
     #  any difference here, it's still good to be explicit.
+    FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
+    if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
+        echo "Error: $FIFO exists but is not a FIFO" >&2
+        exit 1
+    else
+        rm -f "$FIFO"
+    fi
+    mkfifo "$FIFO"
+
+    read SORT_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((THREADS - 1))")
     featureCounts \
-        -T "$CORES" \
+        -T "$((FC_THREADS - 1))" \
         -a "$GTF_PATH" \
         -o "$FEATURECOUNTS_DIR/${sample_name}.txt" \
         -p -B -C \
         --donotsort \
         -R BAM \
         --Rpath "$FEATURECOUNTS_DIR/" \
-        "$FEATURECOUNTS_DIR/${sample_name}.temp.bam" \
-        2> $FEATURECOUNTS_DIR/$sample_name.log
-
-    mv "$FEATURECOUNTS_DIR/${sample_name}.temp.bam.featureCounts.bam" "$FEATURECOUNTS_DIR/${sample_name}.bam"
+        "$STAR_DIR/${sample_name}/Aligned.out.bam" \
+        2> $FEATURECOUNTS_DIR/$sample_name.log \
+    & \
+    python -m folitools.add_tags \
+        --input "$FIFO" \
+        --cell_tag ${sample_name} \
+    | \
     sambamba sort \
-        --nthreads $CORES \
+        --nthreads "$SORT_THREADS" \
         --memory-limit 16GB \
-        "$FEATURECOUNTS_DIR/${sample_name}.bam" \
-        2> /dev/null
+        --out "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
+        /dev/stdin \
+    & \
+    wait
+    
+    rm -f $FIFO
 
-    rm "$FEATURECOUNTS_DIR/${sample_name}.temp.bam" "$FEATURECOUNTS_DIR/${sample_name}.bam"
-# done
+    rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
+
+    # - STAR can read from stdin with FIFO, and can output BAM to stdout.
+    # - featureCounts cannot read BAM from stdin when -R is specified, but can output BAM with FIFO.
+    # - sambamba sort can take input from stdin and output to stdout.
+    # - umi_tools group in the next step does not support input from stdin but can 
+    #    output BAM to stdout for sorting.
+    # - umi_tools group does not require sorted BAM, so I do not sort bam here and 
+    #    directly give unsorted BAM to umi_tools group in the next step.
 done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
 
 # Unload the STAR genome index to free up memory
 echo "Unloading STAR genome from memory."
 STAR \
-    --runThreadN "$STAR_THREADS" \
+    --runThreadN 1 \
     --genomeDir "$STAR_INDEX" \
     --genomeLoad Remove \
     --outFileNamePrefix _temp/ \

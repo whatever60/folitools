@@ -49,13 +49,13 @@ Outputs include:
 - FastQC reports in `./fastq_fastqc/` and `./fastp_fastqc/`
 - Summary statistics in `fastq.stats` and `fastp.stats`
 
-Note that input FASTQ files are assumed to be paired-end. Read 1 pattern is provided to the script by users and files of read 2 will be automatically derived from read 1. This is also true for the following steps.
+Note that input FASTQ files are assumed to be paired-end. Read 1 pattern is provided to the script by users and files of read 2 will be automatically derived from read 1. This is also the case for the following steps.
 
 Optionally, you can restrict processing to a subset of samples by providing a custom glob pattern.
 
 For example:
 ```bash
-foli qc --input 'sample-A*_R1_*.fastq.gz'
+foli qc --input 'sample-A*_R1_*.fastq.gz' --cores 8
 ```
 
 ### Step 2. Probe assignment
@@ -64,9 +64,11 @@ foli qc --input 'sample-A*_R1_*.fastq.gz'
 foli assign-probes
 ```
 
-This command performs gene probe primer assignment and trimming using `cutadapt`. It 
-processes reads from the `./fastp/` directory and writes output FASTQs to `./rest_all/`.
-Probe primer sequences should be provided as FASTA files in `./data/` by default. A summary statistics of FASTQ files in `./rest_all` is also generated at `./rest_all.stats`.
+This command performs gene probe primer assignment and trimming using `cutadapt`. It processes reads from the `./fastp/` directory and writes output FASTQs to `./rest_all/`.
+
+Probe primer sequences should be provided as FASTA files in `./data/` by default.
+
+This step extracts UMI sequences from adapter matches and embeds them in read names for downstream processing. A summary statistics of FASTQ files in `./rest_all` is also generated at `./rest_all.stats`.
 
 Optionally, you can:
 - Specify a custom glob pattern to restrict which files are processed (e.g. `'sample_A*_1.fq.gz'`)
@@ -74,7 +76,7 @@ Optionally, you can:
 
 For example:
 ```bash
-foli assign-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --threads 8
+foli assign-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --cores 8
 ```
 
 ### Step 3. Mapping and Feature Counting
@@ -83,41 +85,61 @@ foli assign-probes --input 'sample-A*_1.fq.gz' --adapter-dir ./barcodes --thread
 foli map --star-index STAR_INDEX_PATH --gtf GTF_PATH
 ```
 
-This command aligns reads to a genome using `STAR` and assigns transcripts using `featureCounts`. It expects paired-end FASTQs in `./rest_all/`, filters out short reads (primer dimers), and writes `STAR` output to `./star/` and `featureCounts` output (sorted BAM files and count tables) to `./featurecounts/`.
+This command performs a streamlined alignment and feature counting using `STAR` and `featureCounts`.
+
+This step filters out short reads (< 60bp, considered primer dimers) using `cutadapt`, aligns filtered reads to the genome using `STAR`, and assigns reads to genomic features using `featureCounts`.
+
+UMI sequences and cell barcodes are added to BAM records as tags (`US` for raw UMI, `UC` for filtered UMI, `CB` for cell barcode) for the next counting step.
+
+Input files are expected in `./rest_all/` with paired-end naming pattern.
+
+Outputs include:
+- STAR alignment files in `./star/`
+- Sorted, tagged BAM files in `./featurecounts/`
+- `featureCounts` tables and logs
 
 Optionally, you can provide a glob pattern to filter input files.
 
 For example:
 ```bash
-foli map --input 'sample-A*_1.fq.gz' --star-index STAR_INDEX_PATH --gtf GTF_PATH
+foli map --input 'sample-A*_1.fq.gz' --star-index STAR_INDEX_PATH --gtf GTF_PATH --cores 8
 ```
 
-### Step 4. Gene Counting
+### Step 4. UMI-based Gene Counting
 
 ```bash
 foli count
 ```
 
-This command runs `umi_tools` on BAM files in `./featurecounts/` and outputs read count tables to `./counts/`.
+This command processes BAM files from `./featurecounts/` using `umi_tools group` to generate UMI-deduplicated count data. This step:
+
+1. Groups reads by UMI, cell barcode, and gene assignment
+2. Handles paired-end reads, unmapped reads, and chimeric pairs
+3. Outputs detailed grouping information for downstream analysis
+
+Input BAM files are expected to contain UMI tags (`UC`), cell tags (`CB`), and gene assignment tags (`XT`) from the previous step.
+
+Outputs include:
+- UMI grouping tables (`.group.tsv.gz`) in `./counts/`
+- Processing logs for each sample
 
 Optionally, you can provide a glob pattern to restrict input BAMs.
 
 For example:
 ```bash
-foli count --input 'sample-A*.bam'
+foli count --input 'sample-A*.bam' --cores 8
 ```
 
 ## Output Structure
 
 Each stage writes outputs to stage-specific subdirectories:
 
-| Stage      | Output Directories                    | Key Files |
-|------------|---------------------------------------|-----------|
-| fastp      | `./fastp/`, `./fastp_fastqc/`        | Trimmed FASTQ files, QC reports |
-| cutadapt   | `./rest_all/`                        | Adapter-trimmed reads, UMI-tagged |
-| map        | `./star/`, `./featurecounts/`        | Alignments, sorted BAM files |
-| count      | `./counts/`                          | UMI count matrices, grouped BAMs |
-
+| Stage         | Output Directories                  | Key Files                           |
+|---------------|-------------------------------------|-------------------------------------|
+| qc            | `./fastp/`, `./fastp_fastqc/`       | Trimmed FASTQ files, QC reports     |
+| assign-probes | `./rest_all/`                       | UMI-tagged, adapter-trimmed reads   |
+| map           | `./star/`, `./featurecounts/`       | Alignments, sorted tagged BAM files |
+| count         | `./counts/`                         | UMI grouping tables, logs           |
 
 ## TODO
 

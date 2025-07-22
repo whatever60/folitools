@@ -6,6 +6,8 @@ import os
 
 from cyclopts import App, Parameter
 
+from .get_matrix import read_counts
+
 
 app = App(help="Foli Tools CLI")
 
@@ -63,7 +65,6 @@ def map_(
     input_: Annotated[
         str,
         Parameter(
-            "--input_",
             help="Optional pattern for R1 FASTQ files (default: '*_1.fq.gz').",
         ),
     ] = "*_1.fq.gz",
@@ -99,7 +100,7 @@ def map_(
             str(star_index),
             "--gtf",
             str(gtf),
-            "--input_",
+            "--pattern",
             input_,
         ),
     )
@@ -113,6 +114,25 @@ def count(
 ):
     """Run the counting step of the pipeline."""
     run("foli_04_count.sh", (input_, str(cores)))
+
+
+
+
+def read_counts_(
+    *,
+    input_: str | list[str],
+    output: Annotated[str, Parameter(help="Output file path (default: stdout)")],
+    gtf: str | None = None,
+) -> None:
+    """
+    CLI entry point: read counts and print a tab-delimited matrix to stdout.
+
+    Args:
+        input_: A file path, glob pattern, or list of file paths.
+        gtf: Optional path to a GTF file for gene_id→gene_symbol mapping.
+    """
+    df = read_counts(input_, gtf)
+    df.to_csv(output, sep="\t", index_label="gene", header=True)
 
 
 if __name__ == "__main__":

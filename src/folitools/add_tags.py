@@ -8,10 +8,10 @@ def add_tags_wo_fastq(
     bam_input: str,
     bam_output: str,
     umi_tag_s_name: str = "US",  # single-read UMI
-    umi_tag_p_name: str = "UP",  # concatenated UMI from paired reads
+    umi_tag_s_correct_name: str = "UC",  # single-read UMI (correct ones only)
     cell_tag_name: str = "CB",
     cell_tag: str | None = None,
-    umi_length: int | None = 6,
+    umi_length: int = 6,
 ) -> None:
     """
     Reads SAM from stdin, parses embedded UMI sequences from the read names,
@@ -51,25 +51,33 @@ def add_tags_wo_fastq(
         for read in sam_in:
             query_name = read.query_name
             assert query_name is not None, "Missing query name in read"
-            read_name, seq1, seq2 = query_name.split("_")
-            if read.is_read1:
-                read.set_tag(umi_tag_s_name, seq1, value_type="Z")
-            else:
-                read.set_tag(umi_tag_s_name, seq2, value_type="Z")
-            read.query_name = read_name
-            # Add the UMI tag from the FASTQ sequence
-            if umi_length is not None:
-                criteria = [
-                    len(seq1) == umi_length,
-                    len(seq2) == umi_length,
-                    "N" not in seq1,
-                    "N" not in seq2,
-                ]
-                if all(criteria):
-                    read.set_tag(umi_tag_p_name, seq1 + seq2, value_type="Z")
+
             # Add the cell tag
             if cell_tag:
                 read.set_tag(cell_tag_name, cell_tag, value_type="Z")
+
+            # Add the UMI tag from the FASTQ sequence
+            read_name, seq1, seq2 = query_name.split("_")
+            read.query_name = read_name
+            criteria = [
+                len(seq1) == umi_length,
+                len(seq2) == umi_length,
+                "N" not in seq1,
+                "N" not in seq2,
+            ]
+            if not all(criteria):
+                seq1_c = seq2_c = "AAAAAA"
+            else:
+                seq1_c, seq2_c = seq1, seq2
+            if read.is_read1:
+                read.set_tag(umi_tag_s_name, seq1, value_type="Z")
+                read.set_tag(umi_tag_s_correct_name, seq1_c, value_type="Z")
+            else:
+                read.set_tag(umi_tag_s_name, seq2, value_type="Z")
+                read.set_tag(umi_tag_s_correct_name, seq2_c, value_type="Z")
+            if read.has_tag("XS"):  # featureCounts tag for feature assignment status
+                read.set_tag("XN", -1, value_type="i")
+                read.set_tag("XT", "Unassigned", value_type="Z")
             # print(query_name, file=sys.stderr)
             bam_out.write(read)
 

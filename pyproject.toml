@@ -21,6 +21,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "tqdm>=4.67.1",
     "umi-tools>=1.1.6",
+    "wcmatch>=10.1",
 ]
 
 

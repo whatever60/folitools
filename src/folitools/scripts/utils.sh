@@ -24,7 +24,10 @@ run_seqkit_stats() {
     if [[ -f "$stats_file" ]]; then
         echo "Warning: Stats file '$stats_file' already exists. Skipping seqkit stats."
     else
-        seqkit stats --all --tabular --threads "${THREADS:-1}" "${fastq_files[@]}" > "$stats_file"
+        # sort the files by name to ensure consistent order
+        IFS=$'\n' sorted_files=($(sort <<<"${fastq_files[*]}"))
+        unset IFS
+        seqkit stats --all --tabular --threads "${THREADS:-1}" "${sorted_files[@]}" > "$stats_file"
     fi
 }
 

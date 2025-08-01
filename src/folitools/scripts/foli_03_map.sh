@@ -213,6 +213,7 @@ for fqR1 in $fqr1s; do
         --memory-limit 16GB \
         --out "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
         /dev/stdin \
+        2> /dev/null \
     & \
     wait
     

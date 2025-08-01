@@ -33,22 +33,22 @@ run_seqkit_stats() {
 
 
 run_fastqc() {
-    # Usage: run_fastqc <trimmed_R1> <trimmed_R2> <output_dir> <threads>
+    # Usage: run_fastqc <R1> <R2> <output_dir> <threads>
     # This function effectively just checks if the files are empty and runs fastqc if 
     # they are not, as fastqc will raise error upon empty files.
-    local trimmed_R1="$1"
-    local trimmed_R2="$2"
+    local R1="$1"
+    local R2="$2"
     local output_dir="$3"
     local threads="$4"
 
     # Check for required arguments
-    if [[ -z "$trimmed_R1" || -z "$trimmed_R2" || -z "$output_dir" || -z "$threads" ]]; then
-        echo "Error: Missing arguments. Usage: run_fastqc <trimmed_R1> <trimmed_R2> <output_dir> <threads>" >&2
+    if [[ -z "$R1" || -z "$R2" || -z "$output_dir" || -z "$threads" ]]; then
+        echo "Error: Missing arguments. Usage: run_fastqc <R1> <R2> <output_dir> <threads>" >&2
         return 1
     fi
 
     flag=1
-    for file in "$trimmed_R1" "$trimmed_R2"; do
+    for file in "$R1" "$R2"; do
         if [[ ! -f "$file" ]]; then
             echo "Error: File '$file' does not exist." >&2
             return 1
@@ -65,11 +65,11 @@ run_fastqc() {
         fi
     done
 
-    if [[ $flag -eq 1 ]]; then
-        echo "Warning: File '$file' is empty. Skipping FastQC." >&2
+    if [[ $flag -eq 0 ]]; then
+        echo "Warning: $R1 or $R2 is empty. Skipping FastQC." >&2
         return
     fi
 
     # Run FastQC
-    fastqc -t "$threads" -o "$output_dir" "$trimmed_R1" "$trimmed_R2" &> /dev/null
+    fastqc -t "$threads" -o "$output_dir" "$R1" "$R2" &> /dev/null
 }

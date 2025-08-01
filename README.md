@@ -143,5 +143,6 @@ Each stage writes outputs to stage-specific subdirectories:
 
 ## TODO
 
-- Add QC report code
-- Add count matrix generation code and basic analysis
+- Add QC report code  (need refactoring)
+- Rarefying curves
+- Primer set evaluation

@@ -7,7 +7,7 @@ import os
 from cyclopts import App, Parameter
 
 from .get_matrix import read_counts
-
+from .primer_info import get_read_stats
 
 app = App(help="Foli Tools CLI")
 
@@ -106,7 +106,7 @@ def map_(
     )
 
 
-@app.command(help="Run read counting")
+@app.command(help="Count UMI with umi_tools")
 def count(
     *,
     input_: Annotated[str, Parameter(help="pattern for BAM files")] = "*.bam",
@@ -116,23 +116,45 @@ def count(
     run("foli_04_count.sh", (input_, str(cores)))
 
 
-
-
-def read_counts_(
+@app.command(help="Generate count matrix")
+def get_count_mtx(
     *,
-    input_: str | list[str],
+    input_: list[str],
     output: Annotated[str, Parameter(help="Output file path (default: stdout)")],
     gtf: str | None = None,
 ) -> None:
     """
-    CLI entry point: read counts and print a tab-delimited matrix to stdout.
-
     Args:
         input_: A file path, glob pattern, or list of file paths.
         gtf: Optional path to a GTF file for gene_id→gene_symbol mapping.
     """
     df = read_counts(input_, gtf)
     df.to_csv(output, sep="\t", index_label="gene", header=True)
+
+
+@app.command(help="Get read statistics from FASTQ files after primer assignment")
+def get_read_stats_(
+    *,
+    input_: list[str],
+    output_dir: str,
+    cores: int = 1,
+    overwrite: bool = False,
+) -> None:
+    """
+    Process FASTQ files to extract read statistics and write to parquet files.
+
+    Args:
+        input_: A file path, glob pattern, or list of file paths for R1 FASTQ files.
+        output_dir: Directory to save the output parquet files.
+        cores: Number of CPU cores to use for parallel processing.
+        overwrite: If True, overwrite existing parquet files.
+    """
+    get_read_stats(
+        read1_pattern=input_,
+        output_dir=output_dir,
+        cores=cores,
+        overwrite=overwrite,
+    )
 
 
 if __name__ == "__main__":

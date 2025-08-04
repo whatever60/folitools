@@ -75,7 +75,8 @@ def add_tags_wo_fastq(
             else:
                 read.set_tag(umi_tag_s_name, seq2, value_type="Z")
                 read.set_tag(umi_tag_s_correct_name, seq2_c, value_type="Z")
-            if read.has_tag("XS"):  # featureCounts tag for feature assignment status
+            if not read.has_tag("XT"):  # No feature assigned by featurecounts
+                assert str(read.get_tag("XS")).startswith("Unassigned")
                 read.set_tag("XN", -1, value_type="i")
                 read.set_tag("XT", "Unassigned", value_type="Z")
             # print(query_name, file=sys.stderr)

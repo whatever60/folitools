@@ -50,7 +50,6 @@ for bam in $bams; do
         --umi-tag UC \
         --assigned-status-tag XT \
         --extract-umi-method tag \
-        --skip-tags-regex "(?!)" \
         --paired \
         --unmapped-reads output \
         --chimeric-pairs output \
@@ -60,6 +59,7 @@ for bam in $bams; do
         --stdin $bam \
         --log2stderr \
         2> "$COUNTS_DIR/${sample_name}.group.log"
+        # --skip-tags-regex "(?!)" \
         # | sambamba sort \
         #     --nthreads "$((THREADS-1))" \
         #     --memory-limit 16GB \

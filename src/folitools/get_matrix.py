@@ -151,7 +151,6 @@ def read_counts(input_: str | list[str], gtf: str | None = None) -> pd.DataFrame
 
     # combine into matrix: samples × genes
     matrix = pd.concat(series_list, axis=1).fillna(0).astype(int).transpose()
-    import pdb; pdb.set_trace()
 
     # rename columns to gene symbols if map provided
     if gtf:

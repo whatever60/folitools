@@ -129,7 +129,15 @@ def get_count_mtx(
         gtf: Optional path to a GTF file for gene_id→gene_symbol mapping.
     """
     df = read_counts(input_, gtf)
-    df.to_csv(output, sep="\t", index_label="gene", header=True)
+    if any(output.endswith(ext) for ext in [".tsv", ".txt", ".tsv.gz", ".txt.gz"]):
+        sep = "\t"
+    elif any(output.endswith(ext) for ext in [".csv", ".csv.gz"]):
+        sep = ","
+    else:
+        raise ValueError(
+            f"Output file must end with .tsv, .txt, .tsv.gz, or .txt.gz: {output!r}"
+        )
+    df.to_csv(output, sep=sep, index_label="gene", header=True)
 
 
 @app.command(help="Get read statistics from FASTQ files after primer assignment")

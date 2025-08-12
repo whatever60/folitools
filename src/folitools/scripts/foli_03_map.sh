@@ -1,49 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Argument Parsing ---
-# A more robust argument parsing loop
-THREADS=""
-STAR_INDEX=""
-GTF_PATH=""
-INPUT_FILES="" # Space-separated actual file paths
-OUTPUT_BAM="" # Output directory for BAM files
-OUTPUT_STAR="" # Output directory for STAR files
-SKIP="0" # Number of samples to skip
+# Parse positional arguments
+INPUT_FILES="${1:-}"
+OUTPUT_BAM="${2:-}"
+OUTPUT_STAR="${3:-}"
+STAR_INDEX="${4:-}"
+GTF_PATH="${5:-}"
+THREADS="${6:-1}"
+SKIP="${7:-0}"
+DELETE="${8:-false}"
 
-# A simple help message
-usage() {
-    echo "Usage: $0 --cores <int> --star-index <path> --gtf <path> --pattern <files> --output-bam <path> --output-star <path> [--skip <int>]"
-    echo ""
-    echo "  --cores        : Total number of cores to allocate for the pipeline."
-    echo "  --star-index   : Path to the STAR genome index directory."
-    echo "  --gtf          : Path to the GTF annotation file for featureCounts."
-    echo "  --pattern      : Space-separated list of R1 FASTQ file paths."
-    echo "  --output-bam   : Output directory for BAM files."
-    echo "  --output-star  : Output directory for STAR files."
-    echo "  --skip         : Number of samples to skip (default: 0)."
+if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$OUTPUT_STAR" || -z "$STAR_INDEX" || -z "$GTF_PATH" ]]; then
+    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete]"
+    echo "  input_files    : Space-separated list of R1 FASTQ file paths"
+    echo "  output_bam_dir : Output directory for BAM files"
+    echo "  output_star_dir: Output directory for STAR files"
+    echo "  star_index     : Path to the STAR genome index directory"
+    echo "  gtf_file       : Path to the GTF annotation file"
+    echo "  threads        : Number of threads (default: 1)"
+    echo "  skip           : Number of samples to skip (default: 0)"
+    echo "  delete         : Delete input files after processing (default: false)"
     exit 1
-}
-
-# Parse named arguments
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --cores) THREADS="$2"; shift ;;
-        --star-index) STAR_INDEX="$2"; shift ;;
-        --gtf) GTF_PATH="$2"; shift ;;
-        --pattern) INPUT_FILES="$2"; shift ;;
-        --output-bam) OUTPUT_BAM="$2"; shift ;;
-        --output-star) OUTPUT_STAR="$2"; shift ;;
-        --skip) SKIP="$2"; shift ;;
-        *) echo "Unknown parameter passed: $1"; usage ;;
-    esac
-    shift
-done
-
-# Check for mandatory arguments
-if [[ -z "$THREADS" || -z "$STAR_INDEX" || -z "$GTF_PATH" || -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$OUTPUT_STAR" ]]; then
-    echo "Error: Missing mandatory arguments."
-    usage
 fi
 
 # STAR_INDEX="$HOME/data/gencode/Gencode_human/release_46/STAR_2.7.11b_150"
@@ -238,6 +216,11 @@ for fqR1 in "${fqr1s[@]}"; do
     rm -f $FIFO
 
     rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
+
+    # Remove input FASTQs to save space
+    if [[ "$DELETE" == "True" ]]; then
+        rm "$fqR1" "$fqR2"
+    fi
 
     # - STAR can read from stdin with FIFO, and can output BAM to stdout.
     # - featureCounts cannot read BAM from stdin when -R is specified, but can output BAM with FIFO.

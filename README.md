@@ -32,7 +32,7 @@ Each stage of the pipeline is exposed as a command via `foli <subcommand>`.
 ### Expected Inputs
 
 - Raw paired-end FASTQ files (following the naming pattern `*_R1_*.fastq.gz` and `*_R2_*.fastq.gz`)
-- Adapter FASTA files (`i5_short.fasta` and `i7_short.fasta`)
+- Adapter FASTA files
 - STAR genome index directory
 - GTF annotation file
 

@@ -36,6 +36,7 @@ def qc(
     output_dir: Annotated[str, Parameter(help="Output directory for trimmed files")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
+    delete: Annotated[bool, Parameter(help="Delete input files after processing")] = False,
 ) -> None:
     """
     Run fastp preprocessing.
@@ -49,7 +50,7 @@ def qc(
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_patterns, output_dir, cores, skip))
+    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_patterns, output_dir, cores, skip, delete))
 
 
 @app.command(help="Run cutadapt demultiplexing")
@@ -67,13 +68,14 @@ def assign_probes(
     ],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
+    delete: Annotated[bool, Parameter(help="Delete input files after processing")] = False,
 ):
     """Run the cutadapt step of the pipeline."""
     # Expand patterns to actual file paths
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run("foli_02_cutadapt.sh", (input_patterns, output_dir, str(i5), str(i7), str(cores), str(skip)))
+    run("foli_02_cutadapt.sh", (input_patterns, output_dir, str(i5), str(i7), str(cores), str(skip), str(delete)))
 
 
 @app.command(help="Run mapping step")
@@ -109,6 +111,7 @@ def map_(
         ),
     ] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
+    delete: Annotated[bool, Parameter(help="Delete input files after processing")] = False,
 ):
     """Run the mapping step of the pipeline. Includes read filtering to remove short reads (primer dimers)."""
     # Expand patterns to actual file paths
@@ -118,20 +121,14 @@ def map_(
     run(
         "foli_03_map.sh",
         (
-            "--cores",
-            str(cores),
-            "--star-index",
-            str(star_index),
-            "--gtf",
-            str(gtf),
-            "--pattern",
             input_patterns,
-            "--output-bam",
             output_bam,
-            "--output-star",
             output_star,
-            "--skip",
+            str(star_index),
+            str(gtf),
+            str(cores),
             str(skip),
+            str(delete),
         ),
     )
 

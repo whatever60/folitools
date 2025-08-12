@@ -12,6 +12,7 @@ I5_FILE="${3}"
 I7_FILE="${4}"
 THREADS="${5:-16}"
 SKIP="${6:-0}"
+DELETE="${7:-false}"
 
 REST_DIR="$OUTPUT_DIR"
 
@@ -75,7 +76,9 @@ for fqR1 in "${fqr1s[@]}"; do
     #     &> /dev/null
 
     # Remove input FASTQs to save space
-    # rm "$fqR1" "$fqR2"
+    if [[ "$DELETE" == "True" ]]; then
+        rm "$fqR1" "$fqR2"
+    fi
 
 done | tqdm --total ${#fqr1s[@]} > /dev/null
 

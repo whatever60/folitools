@@ -9,6 +9,7 @@ INPUT_FILES="${1}"  # Space-separated list of actual file paths
 OUTPUT_DIR="${2:-./fastp}"  # Output directory for trimmed files
 THREADS="${3:-16}"
 SKIP="${4:-0}"
+DELETE="${5:-false}"
 
 FASTP_DIR="$OUTPUT_DIR"
 FASTP_FASTQC_DIR="${OUTPUT_DIR}_fastqc"
@@ -98,7 +99,9 @@ for fqR1 in "${fqr1s[@]}"; do
     run_fastqc "$trimmed_R1" "$trimmed_R2" "$FASTP_FASTQC_DIR" "$THREADS"
 
     # Remove input FASTQs to save space
-    # rm "$fqR1" "$fqR2"
+    if [[ "$DELETE" == "True" ]]; then
+        rm "$fqR1" "$fqR2"
+    fi
 done | tqdm --total ${#fqr1s[@]} > /dev/null
 
 run_seqkit_stats "$FASTP_DIR"

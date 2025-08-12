@@ -8,6 +8,7 @@ source "$script_dir/utils.sh"
 INPUT_FILES="${1}"  # Space-separated list of actual file paths
 OUTPUT_DIR="${2:-./fastp}"  # Output directory for trimmed files
 THREADS="${3:-16}"
+SKIP="${4:-0}"
 
 FASTP_DIR="$OUTPUT_DIR"
 FASTP_FASTQC_DIR="${OUTPUT_DIR}_fastqc"
@@ -27,7 +28,7 @@ read -ra fqr1s <<< "$INPUT_FILES"
 i=0
 for fqR1 in "${fqr1s[@]}"; do
     ((++i))
-    if [[ $i -le 49 ]]; then
+    if [[ $i -le $SKIP ]]; then
         echo "Skipping sample $i: $fqR1"
         continue
     fi

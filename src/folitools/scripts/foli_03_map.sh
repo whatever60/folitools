@@ -7,17 +7,21 @@ THREADS=""
 STAR_INDEX=""
 GTF_PATH=""
 INPUT_FILES="" # Space-separated actual file paths
-OUTPUT_DIR="" # Output directory for mapping results
+OUTPUT_BAM="" # Output directory for BAM files
+OUTPUT_STAR="" # Output directory for STAR files
+SKIP="0" # Number of samples to skip
 
 # A simple help message
 usage() {
-    echo "Usage: $0 --cores <int> --star-index <path> --gtf <path> --pattern <files> --output-dir <path>"
+    echo "Usage: $0 --cores <int> --star-index <path> --gtf <path> --pattern <files> --output-bam <path> --output-star <path> [--skip <int>]"
     echo ""
     echo "  --cores        : Total number of cores to allocate for the pipeline."
     echo "  --star-index   : Path to the STAR genome index directory."
     echo "  --gtf          : Path to the GTF annotation file for featureCounts."
     echo "  --pattern      : Space-separated list of R1 FASTQ file paths."
-    echo "  --output-dir   : Output directory for mapping results."
+    echo "  --output-bam   : Output directory for BAM files."
+    echo "  --output-star  : Output directory for STAR files."
+    echo "  --skip         : Number of samples to skip (default: 0)."
     exit 1
 }
 
@@ -28,14 +32,16 @@ while [[ "$#" -gt 0 ]]; do
         --star-index) STAR_INDEX="$2"; shift ;;
         --gtf) GTF_PATH="$2"; shift ;;
         --pattern) INPUT_FILES="$2"; shift ;;
-        --output-dir) OUTPUT_DIR="$2"; shift ;;
+        --output-bam) OUTPUT_BAM="$2"; shift ;;
+        --output-star) OUTPUT_STAR="$2"; shift ;;
+        --skip) SKIP="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
     shift
 done
 
 # Check for mandatory arguments
-if [[ -z "$THREADS" || -z "$STAR_INDEX" || -z "$GTF_PATH" || -z "$INPUT_FILES" || -z "$OUTPUT_DIR" ]]; then
+if [[ -z "$THREADS" || -z "$STAR_INDEX" || -z "$GTF_PATH" || -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$OUTPUT_STAR" ]]; then
     echo "Error: Missing mandatory arguments."
     usage
 fi
@@ -46,8 +52,8 @@ fi
 # GTF="$HOME/data/gencode/Gencode_human/release_46/gencode.v46.primary_assembly.annotation.gtf.gz"
 
 # --- Directory Setup ---
-STAR_DIR="${OUTPUT_DIR%/*}/star"
-FEATURECOUNTS_DIR="$OUTPUT_DIR"
+STAR_DIR="$OUTPUT_STAR"
+FEATURECOUNTS_DIR="$OUTPUT_BAM"
 
 echo "Creating output directories..."
 mkdir -p "$STAR_DIR" "$FEATURECOUNTS_DIR"
@@ -75,7 +81,7 @@ read -ra fqr1s <<< "$INPUT_FILES"
 i=0
 for fqR1 in "${fqr1s[@]}"; do
     ((++i))
-    if [[ $i -le 408 ]]; then
+    if [[ $i -le $SKIP ]]; then
         echo "Skipping sample $i: $fqR1"
         continue
     fi

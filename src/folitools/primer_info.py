@@ -8,7 +8,6 @@ from joblib import Parallel, delayed
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
-import cyclopts
 
 from .utils import expand_path_to_list
 
@@ -154,6 +153,7 @@ def get_read_stats(
     output_dir: str,
     cores: int = 1,
     overwrite: bool = False,
+    skip: int = 0,
 ) -> None:
     """
     Process a single pair of FASTQ files (R1 and R2), extracting UMI and primer info,
@@ -162,7 +162,9 @@ def get_read_stats(
     os.makedirs(output_dir, exist_ok=True)
     read1_files = expand_path_to_list(read1_pattern)
     args = []
-    for read1_path in tqdm(read1_files):
+    for i, read1_path in enumerate(tqdm(read1_files)):
+        if i < skip:
+            continue
         sample = os.path.basename(read1_path).split("_")[0]
         out_path = os.path.join(output_dir, f"{sample}.parquet")
         read2_path = read1_path.replace("_1.fq.gz", "_2.fq.gz")

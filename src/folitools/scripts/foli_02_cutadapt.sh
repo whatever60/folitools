@@ -8,8 +8,10 @@ source "$script_dir/utils.sh"
 
 INPUT_FILES="${1}"  # Space-separated list of actual file paths
 OUTPUT_DIR="${2:-./rest_all}"  # Output directory for UMI-tagged files
-ADAPTER_DIR="${3:-./data}"
-THREADS="${4:-16}"
+I5_FILE="${3}"
+I7_FILE="${4}"
+THREADS="${5:-16}"
+SKIP="${6:-0}"
 
 REST_DIR="$OUTPUT_DIR"
 
@@ -21,7 +23,7 @@ read -ra fqr1s <<< "$INPUT_FILES"
 i=0
 for fqR1 in "${fqr1s[@]}"; do
     ((++i))
-    if [[ $i -le 49 ]]; then
+    if [[ $i -le $SKIP ]]; then
         echo "Skipping sample $i: $fqR1"
         continue
     fi
@@ -40,8 +42,8 @@ for fqR1 in "${fqr1s[@]}"; do
     cutadapt \
         -j "$THREADS" \
         -e 0.1 \
-        -g "file:$ADAPTER_DIR/i5_short.fasta;min_overlap=20" \
-        -G "file:$ADAPTER_DIR/i7_short.fasta;min_overlap=20" \
+        -g "file:$I5_FILE;min_overlap=20" \
+        -G "file:$I7_FILE;min_overlap=20" \
         --rename '{id} {adapter_name} {match_sequence}' \
         --action none \
         --interleaved \

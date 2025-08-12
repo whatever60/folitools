@@ -5,6 +5,7 @@ set -euo pipefail
 INPUT_FILES="${1}"  # Space-separated list of actual file paths
 OUTPUT_DIR="${2:-./counts}"  # Output directory for count results
 THREADS="${3:-16}"
+SKIP="${4:-0}"
 
 COUNTS_DIR="$OUTPUT_DIR"
 
@@ -19,7 +20,7 @@ read -ra bams <<< "$INPUT_FILES"
 i=0
 for bam in "${bams[@]}"; do
     ((++i))
-    if [[ $i -le 49 ]]; then
+    if [[ $i -le $SKIP ]]; then
         echo "Skipping sample $i: $bam"
         continue
     fi

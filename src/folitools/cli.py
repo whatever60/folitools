@@ -35,6 +35,7 @@ def qc(
     ],
     output_dir: Annotated[str, Parameter(help="Output directory for trimmed files")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
+    skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
 ) -> None:
     """
     Run fastp preprocessing.
@@ -48,7 +49,7 @@ def qc(
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_patterns, output_dir, cores))
+    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_patterns, output_dir, cores, skip))
 
 
 @app.command(help="Run cutadapt demultiplexing")
@@ -65,13 +66,14 @@ def assign_probes(
         Path, Parameter(help="Path to i7 adapter FASTA file")
     ],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
+    skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
 ):
     """Run the cutadapt step of the pipeline."""
     # Expand patterns to actual file paths
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run("foli_02_cutadapt.sh", (input_patterns, output_dir, str(i5), str(i7), str(cores)))
+    run("foli_02_cutadapt.sh", (input_patterns, output_dir, str(i5), str(i7), str(cores), str(skip)))
 
 
 @app.command(help="Run mapping step")
@@ -106,6 +108,7 @@ def map_(
             help="Total number of cores to allocate for the pipeline.",
         ),
     ] = 8,
+    skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
 ):
     """Run the mapping step of the pipeline. Includes read filtering to remove short reads (primer dimers)."""
     # Expand patterns to actual file paths
@@ -127,6 +130,8 @@ def map_(
             output_bam,
             "--output-star",
             output_star,
+            "--skip",
+            str(skip),
         ),
     )
 
@@ -137,13 +142,14 @@ def count(
     input_: Annotated[list[str], Parameter(help="File path, glob pattern, or list of file paths for BAM files")],
     output_dir: Annotated[str, Parameter(help="Output directory for count results")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
+    skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
 ):
     """Run the counting step of the pipeline."""
     # Expand patterns to actual file paths
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run("foli_04_count.sh", (input_patterns, output_dir, str(cores)))
+    run("foli_04_count.sh", (input_patterns, output_dir, str(cores), str(skip)))
 
 
 @app.command(help="Generate count matrix")
@@ -177,6 +183,7 @@ def get_read_stats_(
     output_dir: str,
     cores: int = 1,
     overwrite: bool = False,
+    skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
 ) -> None:
     """
     Process FASTQ files to extract read statistics and write to parquet files.
@@ -192,6 +199,7 @@ def get_read_stats_(
         output_dir=output_dir,
         cores=cores,
         overwrite=overwrite,
+        skip=skip,
     )
 
 

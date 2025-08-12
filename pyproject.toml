@@ -12,6 +12,7 @@ dependencies = [
     "ipywidgets>=8.1.7",
     "joblib>=1.5.1",
     "matplotlib>=3.10.3",
+    "natsort>=8.4.0",
     "numpy>=2.3.1",
     "pandas>=2.3.0",
     "polars>=1.31.0",

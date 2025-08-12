@@ -33,7 +33,7 @@ def qc(
     input_: Annotated[
         list[str], Parameter(help="File path, glob pattern, or list of file paths for R1 FASTQ files")
     ],
-    output_dir: Annotated[str, Parameter(help="Output directory for trimmed files")] = "./fastp",
+    output_dir: Annotated[str, Parameter(help="Output directory for trimmed files")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ) -> None:
     """
@@ -57,10 +57,13 @@ def assign_probes(
     input_: Annotated[
         list[str], Parameter(help="File path, glob pattern, or list of file paths for R1 FASTQ files")
     ],
-    output_dir: Annotated[str, Parameter(help="Output directory for UMI-tagged files")] = "./rest_all",
-    probe_dir: Annotated[
-        Path, Parameter(help="Directory containing probe FASTA files")
-    ] = Path("./data"),
+    output_dir: Annotated[str, Parameter(help="Output directory for UMI-tagged files")],
+    i5: Annotated[
+        Path, Parameter(help="Path to i5 adapter FASTA file")
+    ],
+    i7: Annotated[
+        Path, Parameter(help="Path to i7 adapter FASTA file")
+    ],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ):
     """Run the cutadapt step of the pipeline."""
@@ -68,7 +71,7 @@ def assign_probes(
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run("foli_02_cutadapt.sh", (input_patterns, output_dir, probe_dir, str(cores)))
+    run("foli_02_cutadapt.sh", (input_patterns, output_dir, str(i5), str(i7), str(cores)))
 
 
 @app.command(help="Run mapping step")
@@ -80,7 +83,8 @@ def map_(
             help="File path, glob pattern, or list of file paths for R1 FASTQ files.",
         ),
     ],
-    output_dir: Annotated[str, Parameter(help="Output directory for mapping results")] = "./featurecounts",
+    output_bam: Annotated[str, Parameter(help="Output directory for BAM files")],
+    output_star: Annotated[str, Parameter(help="Output directory for STAR alignment files")],
     star_index: Annotated[
         Path,
         Parameter(
@@ -119,8 +123,10 @@ def map_(
             str(gtf),
             "--pattern",
             input_patterns,
-            "--output-dir",
-            output_dir,
+            "--output-bam",
+            output_bam,
+            "--output-star",
+            output_star,
         ),
     )
 
@@ -129,7 +135,7 @@ def map_(
 def count(
     *,
     input_: Annotated[list[str], Parameter(help="File path, glob pattern, or list of file paths for BAM files")],
-    output_dir: Annotated[str, Parameter(help="Output directory for count results")] = "./counts",
+    output_dir: Annotated[str, Parameter(help="Output directory for count results")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ):
     """Run the counting step of the pipeline."""

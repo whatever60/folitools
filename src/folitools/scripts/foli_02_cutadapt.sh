@@ -21,9 +21,10 @@ read -ra fqr1s <<< "$INPUT_FILES"
 i=0
 for fqR1 in "${fqr1s[@]}"; do
     ((++i))
-    # if [[ $i -le 49 ]]; then
-    #     continue
-    # fi
+    if [[ $i -le 49 ]]; then
+        echo "Skipping sample $i: $fqR1"
+        continue
+    fi
     # Derive the matching R2
     fqR2="${fqR1/_1/_2}"
     baseR1=$(basename "$fqR1" .fq.gz)

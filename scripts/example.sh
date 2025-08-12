@@ -23,35 +23,35 @@ foli qc \
 foli assign-probes \
     --input "./fastp/*_1.fq.gz" \
     --output-dir "./rest_all" \
-    --probe-dir ./data/probe \
+    --i5 ./data/probe/i5_short.fasta \
+    --i7 ./data/probe/i7_short.fasta \
     --cores 16
 
-# Step 3: Get read statistics (optional)
-# Input: UMI-tagged FASTQ files from step 2
+# Get read statistics for step 2
 foli get-read-stats \
     --input "./rest_all/*_1.fq.gz" \
     --output-dir "./rest_all_stats" \
     --cores 16 \
     --overwrite
 
-# Step 4: Mapping and feature counting
+# Step 3: Mapping and feature counting
 # Input: UMI-tagged FASTQ files from step 2
 foli map \
     --input "./rest_all/*_1.fq.gz" \
-    --output-dir "./featurecounts" \
+    --output-bam "./featurecounts" \
+    --output-star "./star" \
     --star-index "$STAR_INDEX" \
     --gtf "$GTF_FILE" \
     --cores 16
 
-# Step 5: UMI-based gene counting
-# Input: Sorted BAM files from step 4
+# Step 4: UMI-based gene counting
+# Input: Sorted BAM files from step 3
 foli count \
     --input "./featurecounts/*.sorted.bam" \
     --output-dir "./counts" \
     --cores 16
 
-# Step 6: Generate final count matrix
-# Input: UMI grouping files from step 5
+# Generate final count matrix for step 4
 foli get-count-mtx \
     --input "./counts/*.group.tsv.gz" \
     --output "./foli_counts.tsv" \

@@ -19,9 +19,10 @@ read -ra bams <<< "$INPUT_FILES"
 i=0
 for bam in "${bams[@]}"; do
     ((++i))
-    # if [[ $i -le 49 ]]; then
-    #     continue
-    # fi
+    if [[ $i -le 49 ]]; then
+        echo "Skipping sample $i: $bam"
+        continue
+    fi
     # split by dot to get the sample name
     base_bam=$(basename "$bam" .bam)
     sample_name="${base_bam%%.*}"

@@ -23,17 +23,22 @@ run_seqkit_stats() {
         return 1
     fi
 
-    if [[ -f "$stats_file" ]]; then
-        echo "Warning: Stats file '$stats_file' already exists. Skipping seqkit stats."
-    else
+    # if [[ -f "$stats_file" ]]; then
+    #     echo "Warning: Stats file '$stats_file' already exists. Skipping seqkit stats."
+    # else
         # sort the files by name to ensure consistent order
         # IFS=$'\n' sorted_files=($(sort <<<"${fastq_files[*]}"))
         # unset IFS
-        mapfile -d '' -t sorted_files < <(
-            printf '%s\0' "${fastq_files[@]}" | sort -zV
-        )
-        seqkit stats --all --tabular --threads "${THREADS:-1}" "${sorted_files[@]}" > "$stats_file"
-    fi
+    #     mapfile -d '' -t sorted_files < <(
+    #         printf '%s\0' "${fastq_files[@]}" | sort -zV
+    #     )
+    #     seqkit stats --all --tabular --threads "${THREADS:-1}" "${sorted_files[@]}" > "$stats_file"
+    # fi
+    mapfile -d '' -t sorted_files < <(
+        printf '%s\0' "${fastq_files[@]}" | sort -zV
+    )
+    seqkit stats --all --tabular --threads "${THREADS:-1}" "${sorted_files[@]}" > "$stats_file"
+
 }
 
 

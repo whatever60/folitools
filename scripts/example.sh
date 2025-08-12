@@ -6,6 +6,11 @@
 # export STAR_INDEX="/path/to/star/index"
 # export GTF_FILE="/path/to/annotation.gtf"
 
+# Step 0 (optional): Input file QC
+mapfile -d '' files < <(printf '%s\0' ./fastq/*_R{1,2}_001.fastq.gz | sort -zV)
+seqkit stats --all --tabular --threads 16 "${files[@]}" > ./fastq.stats
+fastqc -t 16 -o ./fastq_fastqc "${files[@]}" &> /dev/null
+
 # Step 1: Quality control and preprocessing
 # Input: Raw FASTQ files (specify R1 files, R2 files are automatically detected)
 foli qc \

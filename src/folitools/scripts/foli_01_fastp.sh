@@ -21,14 +21,6 @@ mkdir -p "$FASTQ_FASTQC_DIR"
 # Convert space-separated string back to array
 read -ra fqr1s <<< "$INPUT_FILES"
 
-# Generate stats for input files from their directories (run once per unique directory)
-input_dirs=$(printf '%s\n' "${fqr1s[@]}" | xargs -I {} dirname {} | sort -u)
-for dir in $input_dirs; do
-    if [[ -d "$dir" ]] && ls "$dir"/*.{fastq.gz,fq.gz,fastq,fq} 1> /dev/null 2>&1; then
-        run_seqkit_stats "$dir"
-    fi
-done
-
 ############################################
 # Main loop over paired-end FASTQs
 ############################################

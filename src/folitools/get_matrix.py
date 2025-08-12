@@ -20,22 +20,17 @@ def deduplicate_umi(
     if isinstance(gene_counts, pl.LazyFrame):
         gene_counts = gene_counts.collect()
     gene_counts = (
-        gene_counts.select(["gene", "umi_count"])
-        .to_pandas()
-        .set_index("gene")
+        gene_counts.select(["gene", "umi_count"]).to_pandas().set_index("gene")
     )
     return gene_counts
 
 
 def count_umi(group_count: pl.DataFrame | pl.LazyFrame) -> pd.DataFrame:
-    result = (
-        group_count.select(pl.struct(["gene", "final_umi"]).value_counts())
-        .select(
-            umi=pl.col("gene").struct.field("gene").struct.field("gene")
-            + ":"
-            + pl.col("gene").struct.field("gene").struct.field("final_umi"),
-            count=pl.col("gene").struct.field("count"),
-        )
+    result = group_count.select(pl.struct(["gene", "final_umi"]).value_counts()).select(
+        umi=pl.col("gene").struct.field("gene").struct.field("gene")
+        + ":"
+        + pl.col("gene").struct.field("gene").struct.field("final_umi"),
+        count=pl.col("gene").struct.field("count"),
     )
     if isinstance(result, pl.LazyFrame):
         result = result.collect()
@@ -43,12 +38,9 @@ def count_umi(group_count: pl.DataFrame | pl.LazyFrame) -> pd.DataFrame:
 
 
 def count_gene(group_count: pl.DataFrame | pl.LazyFrame) -> pd.DataFrame:
-    result = (
-        group_count.select(pl.col("gene").value_counts())
-        .select(
-            gene=pl.col("gene").struct.field("gene"),
-            count=pl.col("gene").struct.field("count"),
-        )
+    result = group_count.select(pl.col("gene").value_counts()).select(
+        gene=pl.col("gene").struct.field("gene"),
+        count=pl.col("gene").struct.field("count"),
     )
     if isinstance(result, pl.LazyFrame):
         result = result.collect()
@@ -70,7 +62,7 @@ def process_count_file(fp: str) -> pd.Series:
     Returns:
         pd.Series: Index is gene, values are umi_count, name is sample (file stem).
     """
-    sample = Path(fp).stem
+    sample = Path(fp).stem.split(".")[0]
     expected = [
         "read_id",
         "contig",
@@ -159,6 +151,15 @@ def read_counts(input_: str | list[str], gtf: str | None = None) -> pd.DataFrame
             id2symbol.get(col.split(".")[0], col) for col in matrix.columns
         ]
         # Aggregate by gene symbol if multiple IDs map to the same symbol
-        matrix = matrix.transpose().groupby(level=0, sort=False).mean().transpose()
+        matrix = (
+            matrix.transpose()
+            .groupby(level=0, sort=False)
+            .mean()
+            .transpose()
+            .astype(int)
+        )
+    # reorder columns by average rel ab
+    rel_ab = matrix.divide(matrix.sum(axis=1), axis=0)
+    matrix = matrix[rel_ab.mean(axis=0).sort_values(ascending=False).index]
 
     return matrix

@@ -6,19 +6,20 @@ ulimit -n 1000000
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$script_dir/utils.sh"
 
-FASTP_DIR=./fastp  # input
-REST_DIR="./rest_all"
-# REST_NONDIMER_DIR="./rest"
+INPUT_FILES="${1}"  # Space-separated list of actual file paths
+OUTPUT_DIR="${2:-./rest_all}"  # Output directory for UMI-tagged files
+ADAPTER_DIR="${3:-./data}"
+THREADS="${4:-16}"
 
-GLOB_PATTERN="${1:-*_1.fq.gz}"  # Default if not provided
-ADAPTER_DIR="${2:-./data}"
-THREADS="${3:-16}"
+REST_DIR="$OUTPUT_DIR"
 
 mkdir -p $REST_DIR
 
-fqr1s=$(ls "$FASTP_DIR"/$GLOB_PATTERN)
+# Convert space-separated string back to array
+read -ra fqr1s <<< "$INPUT_FILES"
+
 i=0
-for fqR1 in $fqr1s; do
+for fqR1 in "${fqr1s[@]}"; do
     ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
@@ -69,7 +70,11 @@ for fqR1 in $fqr1s; do
     #         > "$REST_NONDIMER_DIR/${sample_name}_2.fq.gz") \
     #     "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
     #     &> /dev/null
-done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
+
+    # Remove input FASTQs to save space
+    # rm "$fqR1" "$fqR2"
+
+done | tqdm --total ${#fqr1s[@]} > /dev/null
 
 run_seqkit_stats "$REST_DIR"
 # run_seqkit_stats "$REST_NONDIMER_DIR"

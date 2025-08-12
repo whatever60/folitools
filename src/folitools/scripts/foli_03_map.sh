@@ -6,16 +6,18 @@ set -euo pipefail
 THREADS=""
 STAR_INDEX=""
 GTF_PATH=""
-GLOB_PATTERN="*_1.fq.gz" # Default pattern
+INPUT_FILES="" # Space-separated actual file paths
+OUTPUT_DIR="" # Output directory for mapping results
 
 # A simple help message
 usage() {
-    echo "Usage: $0 --THREADS <int> --star-index <path> --gtf <path> [--pattern <glob>]"
+    echo "Usage: $0 --cores <int> --star-index <path> --gtf <path> --pattern <files> --output-dir <path>"
     echo ""
-    echo "  --THREADS        : Total number of THREADS to allocate for the pipeline."
+    echo "  --cores        : Total number of cores to allocate for the pipeline."
     echo "  --star-index   : Path to the STAR genome index directory."
     echo "  --gtf          : Path to the GTF annotation file for featureCounts."
-    echo "  --pattern      : Optional glob pattern for R1 FASTQ files (default: '*_1.fq.gz')."
+    echo "  --pattern      : Space-separated list of R1 FASTQ file paths."
+    echo "  --output-dir   : Output directory for mapping results."
     exit 1
 }
 
@@ -25,14 +27,15 @@ while [[ "$#" -gt 0 ]]; do
         --cores) THREADS="$2"; shift ;;
         --star-index) STAR_INDEX="$2"; shift ;;
         --gtf) GTF_PATH="$2"; shift ;;
-        --pattern) GLOB_PATTERN="$2"; shift ;;
+        --pattern) INPUT_FILES="$2"; shift ;;
+        --output-dir) OUTPUT_DIR="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
     shift
 done
 
 # Check for mandatory arguments
-if [[ -z "$THREADS" || -z "$STAR_INDEX" || -z "$GTF_PATH" ]]; then
+if [[ -z "$THREADS" || -z "$STAR_INDEX" || -z "$GTF_PATH" || -z "$INPUT_FILES" || -z "$OUTPUT_DIR" ]]; then
     echo "Error: Missing mandatory arguments."
     usage
 fi
@@ -43,15 +46,22 @@ fi
 # GTF="$HOME/data/gencode/Gencode_human/release_46/gencode.v46.primary_assembly.annotation.gtf.gz"
 
 # --- Directory Setup ---
-REST_DIR="./rest_all"  # input
-STAR_DIR="./star"
-FEATURECOUNTS_DIR="./featurecounts"
+STAR_DIR="${OUTPUT_DIR%/*}/star"
+FEATURECOUNTS_DIR="$OUTPUT_DIR"
 
 echo "Creating output directories..."
 mkdir -p "$STAR_DIR" "$FEATURECOUNTS_DIR"
 
 # --- Pre-load STAR Genome Index ---
 echo "Loading STAR genome into memory..."
+# Remove first?
+STAR \
+    --runThreadN 1 \
+    --genomeDir "$STAR_INDEX" \
+    --genomeLoad Remove \
+    --outFileNamePrefix _temp/ \
+    > /dev/null
+rm -rf _temp
 STAR \
     --runThreadN 1 \
     --genomeDir "$STAR_INDEX" \
@@ -60,13 +70,15 @@ STAR \
     > /dev/null
 rm -rf _temp
 
-fqr1s=$(ls "$REST_DIR"/$GLOB_PATTERN)
+# Convert space-separated string back to array
+read -ra fqr1s <<< "$INPUT_FILES"
 i=0
-for fqR1 in $fqr1s; do
+for fqR1 in "${fqr1s[@]}"; do
     ((++i))
-    # if [[ $i -le 7 ]]; then
-    #     continue
-    # fi
+    if [[ $i -le 408 ]]; then
+        echo "Skipping sample $i: $fqR1"
+        continue
+    fi
 
     # Derive the matching R2
     fqR2="${fqR1/_1/_2}"
@@ -143,7 +155,7 @@ for fqR1 in $fqr1s; do
         -j 1 \
         --interleaved \
         --minimum-length 60:60 \
-        "$REST_DIR/${sample_name}_1.fq.gz" "$REST_DIR/${sample_name}_2.fq.gz" \
+        "$fqR1" "$fqR2" \
         2> /dev/null \
         | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
             '
@@ -228,7 +240,7 @@ for fqR1 in $fqr1s; do
     #    output BAM to stdout for sorting.
     # - umi_tools group does not require sorted BAM, so I do not sort bam here and 
     #    directly give unsorted BAM to umi_tools group in the next step.
-done | tqdm --total $(echo "$fqr1s" | wc -w) > /dev/null
+done | tqdm --total ${#fqr1s[@]} > /dev/null
 
 # Unload the STAR genome index to free up memory
 echo "Unloading STAR genome from memory."

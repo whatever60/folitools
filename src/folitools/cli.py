@@ -8,6 +8,7 @@ from cyclopts import App, Parameter
 
 from .get_matrix import read_counts
 from .primer_info import get_read_stats
+from .utils import expand_path_to_list
 
 app = App(help="Foli Tools CLI")
 
@@ -30,44 +31,56 @@ def run(script_name: str, args: tuple) -> None:
 def qc(
     *,
     input_: Annotated[
-        str, Parameter(help="pattern for input FASTQ files")
-    ] = "*_R1_*.fastq.gz",
+        list[str], Parameter(help="File path, glob pattern, or list of file paths for R1 FASTQ files")
+    ],
+    output_dir: Annotated[str, Parameter(help="Output directory for trimmed files")] = "./fastp",
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ) -> None:
     """
     Run fastp preprocessing.
 
     Args:
+        input_: File path, glob pattern, or list of file paths for R1 FASTQ files.
+        output_dir: Output directory for trimmed files.
         cores: Number of CPU cores to allocate for fastp.
     """
-    # pass the core count as the only argument to your shell script
-    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_, cores))
+    # Expand patterns to actual file paths
+    file_paths = expand_path_to_list(input_)
+    # Convert list to space-separated string for shell script
+    input_patterns = " ".join(file_paths)
+    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_patterns, output_dir, cores))
 
 
 @app.command(help="Run cutadapt demultiplexing")
 def assign_probes(
     *,
     input_: Annotated[
-        str, Parameter(help="pattern for R1 FASTQ files from fastp output")
-    ] = "*_1.fq.gz",
-    adapter_dir: Annotated[
-        Path, Parameter(help="Directory containing adapter FASTA files")
+        list[str], Parameter(help="File path, glob pattern, or list of file paths for R1 FASTQ files")
+    ],
+    output_dir: Annotated[str, Parameter(help="Output directory for UMI-tagged files")] = "./rest_all",
+    probe_dir: Annotated[
+        Path, Parameter(help="Directory containing probe FASTA files")
     ] = Path("./data"),
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ):
     """Run the cutadapt step of the pipeline."""
-    run("foli_02_cutadapt.sh", (input_, adapter_dir, str(cores)))
+    # Expand patterns to actual file paths
+    file_paths = expand_path_to_list(input_)
+    # Convert list to space-separated string for shell script
+    input_patterns = " ".join(file_paths)
+    run("foli_02_cutadapt.sh", (input_patterns, output_dir, probe_dir, str(cores)))
 
 
 @app.command(help="Run mapping step")
 def map_(
     *,
     input_: Annotated[
-        str,
+        list[str],
         Parameter(
-            help="Optional pattern for R1 FASTQ files (default: '*_1.fq.gz').",
+            help="File path, glob pattern, or list of file paths for R1 FASTQ files.",
         ),
-    ] = "*_1.fq.gz",
+    ],
+    output_dir: Annotated[str, Parameter(help="Output directory for mapping results")] = "./featurecounts",
     star_index: Annotated[
         Path,
         Parameter(
@@ -91,6 +104,10 @@ def map_(
     ] = 8,
 ):
     """Run the mapping step of the pipeline. Includes read filtering to remove short reads (primer dimers)."""
+    # Expand patterns to actual file paths
+    file_paths = expand_path_to_list(input_)
+    # Convert list to space-separated string for shell script
+    input_patterns = " ".join(file_paths)
     run(
         "foli_03_map.sh",
         (
@@ -101,7 +118,9 @@ def map_(
             "--gtf",
             str(gtf),
             "--pattern",
-            input_,
+            input_patterns,
+            "--output-dir",
+            output_dir,
         ),
     )
 
@@ -109,11 +128,16 @@ def map_(
 @app.command(help="Count UMI with umi_tools")
 def count(
     *,
-    input_: Annotated[str, Parameter(help="pattern for BAM files")] = "*.bam",
+    input_: Annotated[list[str], Parameter(help="File path, glob pattern, or list of file paths for BAM files")],
+    output_dir: Annotated[str, Parameter(help="Output directory for count results")] = "./counts",
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
 ):
     """Run the counting step of the pipeline."""
-    run("foli_04_count.sh", (input_, str(cores)))
+    # Expand patterns to actual file paths
+    file_paths = expand_path_to_list(input_)
+    # Convert list to space-separated string for shell script
+    input_patterns = " ".join(file_paths)
+    run("foli_04_count.sh", (input_patterns, output_dir, str(cores)))
 
 
 @app.command(help="Generate count matrix")

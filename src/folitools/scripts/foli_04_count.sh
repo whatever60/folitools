@@ -2,19 +2,22 @@
 
 set -euo pipefail
 
-FEATURECOUNTS_DIR="./featurecounts"  # input
-COUNTS_DIR="./counts"
+INPUT_FILES="${1}"  # Space-separated list of actual file paths
+OUTPUT_DIR="${2:-./counts}"  # Output directory for count results
+THREADS="${3:-16}"
 
-GLOB_PATTERN="${1:-*.bam}"
-THREADS="${2:-16}"
+COUNTS_DIR="$OUTPUT_DIR"
 
 ############################################
 # Create output directories if needed
 ############################################
 mkdir -p "$COUNTS_DIR"
-bams=$(ls "$FEATURECOUNTS_DIR"/$GLOB_PATTERN)
+
+# Convert space-separated string back to array
+read -ra bams <<< "$INPUT_FILES"
+
 i=0
-for bam in $bams; do
+for bam in "${bams[@]}"; do
     ((++i))
     # if [[ $i -le 49 ]]; then
     #     continue
@@ -65,6 +68,6 @@ for bam in $bams; do
         #     --memory-limit 16GB \
         #     --out "$COUNTS_DIR/${sample_name}.sorted.bam" \
         #     /dev/stdin
-done | tqdm --total $(echo "$bams" | wc -w) > /dev/null
+done | tqdm --total ${#bams[@]} > /dev/null
 
 echo "Pipeline completed successfully!"

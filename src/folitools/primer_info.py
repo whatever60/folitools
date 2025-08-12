@@ -162,7 +162,7 @@ def get_read_stats(
     os.makedirs(output_dir, exist_ok=True)
     read1_files = expand_path_to_list(read1_pattern)
     args = []
-    for read1_path in tqdm(read1_files, desc="Processing reads"):
+    for read1_path in tqdm(read1_files):
         sample = os.path.basename(read1_path).split("_")[0]
         out_path = os.path.join(output_dir, f"{sample}.parquet")
         read2_path = read1_path.replace("_1.fq.gz", "_2.fq.gz")

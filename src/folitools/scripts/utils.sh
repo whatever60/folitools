@@ -2,6 +2,8 @@ run_seqkit_stats() {
     # Usage: run_seqkit_stats /path/to/fastq_dir
 
     local fastq_dir="$1"
+    # convert to absolute path
+    fastq_dir=$(realpath "$fastq_dir")
     local stats_file="$fastq_dir.stats"
 
     if [[ -z "$fastq_dir" ]]; then
@@ -55,11 +57,11 @@ run_fastqc() {
         fi
 
         if file "$file" | grep -q 'gzip compressed'; then
-            if zcat "$file" | head -c1 | grep -q .; then
+            if ! zcat "$file" | head -c1 | grep -q .; then
                 flag=0
             fi
         else
-            if head -c1 "$file" | grep -q .; then
+            if ! head -c1 "$file" | grep -q .; then
                 flag=0
             fi
         fi

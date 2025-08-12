@@ -65,16 +65,15 @@ run_fastqc() {
         fi
 
         if file "$file" | grep -q 'gzip compressed'; then
-            if ! zcat "$file" | head -c1 | grep -q .; then
+            if (( $(gzip -cd -- "$file" | head -c1 | wc -c) == 0 )); then
                 flag=0
             fi
         else
-            if ! head -c1 "$file" | grep -q .; then
+            if (( $(head -c1 -- "$file" | wc -c) == 0 )); then
                 flag=0
             fi
         fi
     done
-
     if [[ $flag -eq 0 ]]; then
         echo "Warning: $R1 or $R2 is empty. Skipping FastQC." >&2
         return

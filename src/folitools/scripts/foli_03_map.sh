@@ -41,11 +41,11 @@ echo "Loading STAR genome into memory..."
 # Remove first?
 STAR \
     --runThreadN 1 \
-    --genomeDir "$STAR_INDEX" \
+    --genomeDir "${STAR_INDEX-}" \
     --genomeLoad Remove \
     --outFileNamePrefix _temp/ \
-    > /dev/null
-rm -rf _temp
+    &>/dev/null || :
+rm -rf _temp 2>/dev/null || :
 STAR \
     --runThreadN 1 \
     --genomeDir "$STAR_INDEX" \

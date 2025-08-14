@@ -31,12 +31,18 @@ def run(script_name: str, args: tuple) -> None:
 def qc(
     *,
     input_: Annotated[
-        list[str], Parameter(help="File path, glob pattern, or list of file paths for R1 FASTQ files")
+        list[str],
+        Parameter(
+            consume_multiple=True,
+            help="File path, glob pattern, or list of file paths for R1 FASTQ files",
+        ),
     ],
     output_dir: Annotated[str, Parameter(help="Output directory for trimmed files")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
-    delete: Annotated[bool, Parameter(help="Delete input files after processing")] = False,
+    delete: Annotated[
+        bool, Parameter(help="Delete input files after processing")
+    ] = False,
 ) -> None:
     """
     Run fastp preprocessing.
@@ -50,32 +56,48 @@ def qc(
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run(f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh", (input_patterns, output_dir, cores, skip, delete))
+    run(
+        f"{os.path.dirname(__file__)}/scripts/foli_01_fastp.sh",
+        (input_patterns, output_dir, cores, skip, delete),
+    )
 
 
 @app.command(help="Run cutadapt demultiplexing")
 def assign_probes(
     *,
     input_: Annotated[
-        list[str], Parameter(help="File path, glob pattern, or list of file paths for R1 FASTQ files")
+        list[str],
+        Parameter(
+            consume_multiple=True,
+            help="File path, glob pattern, or list of file paths for R1 FASTQ files",
+        ),
     ],
     output_dir: Annotated[str, Parameter(help="Output directory for UMI-tagged files")],
-    i5: Annotated[
-        Path, Parameter(help="Path to i5 adapter FASTA file")
-    ],
-    i7: Annotated[
-        Path, Parameter(help="Path to i7 adapter FASTA file")
-    ],
+    i5: Annotated[Path, Parameter(help="Path to i5 adapter FASTA file")],
+    i7: Annotated[Path, Parameter(help="Path to i7 adapter FASTA file")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
-    delete: Annotated[bool, Parameter(help="Delete input files after processing")] = False,
+    delete: Annotated[
+        bool, Parameter(help="Delete input files after processing")
+    ] = False,
 ):
     """Run the cutadapt step of the pipeline."""
     # Expand patterns to actual file paths
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
-    run("foli_02_cutadapt.sh", (input_patterns, output_dir, str(i5), str(i7), str(cores), str(skip), str(delete)))
+    run(
+        "foli_02_cutadapt.sh",
+        (
+            input_patterns,
+            output_dir,
+            str(i5),
+            str(i7),
+            str(cores),
+            str(skip),
+            str(delete),
+        ),
+    )
 
 
 @app.command(help="Run mapping step")
@@ -84,11 +106,14 @@ def map_(
     input_: Annotated[
         list[str],
         Parameter(
+            consume_multiple=True,
             help="File path, glob pattern, or list of file paths for R1 FASTQ files.",
         ),
     ],
     output_bam: Annotated[str, Parameter(help="Output directory for BAM files")],
-    output_star: Annotated[str, Parameter(help="Output directory for STAR alignment files")],
+    output_star: Annotated[
+        str, Parameter(help="Output directory for STAR alignment files")
+    ],
     star_index: Annotated[
         Path,
         Parameter(
@@ -111,7 +136,9 @@ def map_(
         ),
     ] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
-    delete: Annotated[bool, Parameter(help="Delete input files after processing")] = False,
+    delete: Annotated[
+        bool, Parameter(help="Delete input files after processing")
+    ] = False,
 ):
     """Run the mapping step of the pipeline. Includes read filtering to remove short reads (primer dimers)."""
     # Expand patterns to actual file paths
@@ -136,7 +163,13 @@ def map_(
 @app.command(help="Count UMI with umi_tools")
 def count(
     *,
-    input_: Annotated[list[str], Parameter(help="File path, glob pattern, or list of file paths for BAM files")],
+    input_: Annotated[
+        list[str],
+        Parameter(
+            consume_multiple=True,
+            help="File path, glob pattern, or list of file paths for BAM files",
+        ),
+    ],
     output_dir: Annotated[str, Parameter(help="Output directory for count results")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
@@ -176,7 +209,13 @@ def get_count_mtx(
 @app.command(help="Get read statistics from FASTQ files after primer assignment")
 def get_read_stats_(
     *,
-    input_: list[str],
+    input_: Annotated[
+        list[str],
+        Parameter(
+            consume_multiple=True,
+            help="File path, glob pattern, or list of file paths for R1 FASTQ files",
+        ),
+    ],
     output_dir: str,
     cores: int = 1,
     overwrite: bool = False,

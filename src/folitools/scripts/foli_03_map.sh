@@ -179,43 +179,52 @@ for fqR1 in "${fqr1s[@]}"; do
     #  By default, featureCounts will sort such that paired reads are together. We here 
     #  turn on the --donotsort flag, as paired reads are already together. Even though it won't make 
     #  any difference here, it's still good to be explicit.
-    FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
-    if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
-        echo "Error: $FIFO exists but is not a FIFO" >&2
-        exit 1
+
+    # featurecounts cannot handle empty input. so check if the bam from star is empty. 
+    # If so, just copy it and touch other output files
+    first_bam_line=$(samtools view "$STAR_DIR/${sample_name}/Aligned.out.bam" | head -n1) || true
+    if ! echo "$first_bam_line" | grep -q .; then
+        cp "$STAR_DIR/${sample_name}/Aligned.out.bam" "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
+        samtools index "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
+        touch "$FEATURECOUNTS_DIR/${sample_name}.log"
     else
-        rm -f "$FIFO"
+        FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
+        if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
+            echo "Error: $FIFO exists but is not a FIFO" >&2
+            exit 1
+        else
+            rm -f "$FIFO"
+        fi
+        mkfifo "$FIFO"
+        # If not empty, run featureCounts and sambamba sort
+        read SORT_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((THREADS - 1))")
+        featureCounts \
+            -T "$((FC_THREADS - 1))" \
+            -a "$GTF_PATH" \
+            -o "$FEATURECOUNTS_DIR/${sample_name}.txt" \
+            -p -B -C \
+            --donotsort \
+            -R BAM \
+            --Rpath "$FEATURECOUNTS_DIR/" \
+            "$STAR_DIR/${sample_name}/Aligned.out.bam" \
+            2> "$FEATURECOUNTS_DIR/$sample_name.log" \
+        & \
+        python -m folitools.add_tags \
+            --input "$FIFO" \
+            --cell_tag ${sample_name} \
+        | \
+        sambamba sort \
+            --nthreads "$SORT_THREADS" \
+            --memory-limit 16GB \
+            --out "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
+            /dev/stdin \
+            2> /dev/null \
+        & \
+        wait
+        rm -f $FIFO
+        rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
     fi
-    mkfifo "$FIFO"
-
-    read SORT_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((THREADS - 1))")
-    featureCounts \
-        -T "$((FC_THREADS - 1))" \
-        -a "$GTF_PATH" \
-        -o "$FEATURECOUNTS_DIR/${sample_name}.txt" \
-        -p -B -C \
-        --donotsort \
-        -R BAM \
-        --Rpath "$FEATURECOUNTS_DIR/" \
-        "$STAR_DIR/${sample_name}/Aligned.out.bam" \
-        2> $FEATURECOUNTS_DIR/$sample_name.log \
-    & \
-    python -m folitools.add_tags \
-        --input "$FIFO" \
-        --cell_tag ${sample_name} \
-    | \
-    sambamba sort \
-        --nthreads "$SORT_THREADS" \
-        --memory-limit 16GB \
-        --out "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
-        /dev/stdin \
-        2> /dev/null \
-    & \
-    wait
     
-    rm -f $FIFO
-
-    rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
 
     # Remove input FASTQs to save space
     if [[ "$DELETE" == "True" ]]; then

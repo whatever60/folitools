@@ -93,47 +93,26 @@ Key Data Structures:
           primer and adding that of the new primer.
 """
 
+from collections import defaultdict
 import math
 import random
 from copy import deepcopy
 from pathlib import Path
+from functools import lru_cache
 
 import pandas as pd
-from tqdm.auto import tqdm, trange
 
 from .saddle_utils import choice_except
 
 
-def initialize_dimer_length_gc(
-    primer_pool: list[str], overlap_min: int, overlap_max: int, p3_distance_max: int
-) -> dict[str, float]:
-    """Build a lookup of 3'-tail -> score = 2**(overlap_len + GC_count).
-
-    Args:
-        primer_pool: Primer sequences (5'→3').
-        overlap_min: Minimum overlap length to consider.
-        overlap_max: Maximum overlap length to consider.
-        p3_distance_max: Max offset from the 3' end to shift the tail.
-
-    Returns:
-        Mapping tail sequence -> GC-weighted score.
-    """
-    dimer_length_gc: dict[str, float] = {}
-    for primer in primer_pool:
-        primer_len = len(primer)
-        for overlap_len in range(overlap_min, overlap_max + 1):
-            for p3_distance in range(p3_distance_max + 1):
-                end = primer_len - p3_distance
-                start = end - overlap_len
-                if start < 0:
-                    continue
-                tail = primer[start:end]
-                dimer_length_gc[tail] = 2 ** (overlap_len + count_gc(tail))
-    return dimer_length_gc
+@lru_cache(maxsize=None)
+def _tail_score(tail: str) -> float:
+    """Calculate the score for a given tail sequence."""
+    return 2 ** (len(tail) + count_gc(tail))
 
 
-def initialize_hash_table(
-    primer_pool: list[str], overlap_min: int, overlap_max: int, p3_distance_max: int
+def init_hash_table(
+    primer_pool: list[str], overlap_min: int, overlap_max: int, p3_dist_max: int
 ) -> dict[str, float]:
     """Allocate a tail-hash with zeros for both tails and RC tails.
 
@@ -141,7 +120,7 @@ def initialize_hash_table(
         primer_pool: Primer sequences (5'→3').
         overlap_min: Minimum overlap length to hash.
         overlap_max: Maximum overlap length to hash.
-        p3_distance_max: Max offset from the 3' end to shift the tail.
+        p3_dist_max: Max offset from the 3' end to shift the tail.
 
     Returns:
         Mapping tail sequence -> 0.0 (ready to be incremented/decremented).
@@ -151,7 +130,7 @@ def initialize_hash_table(
         rc = reverse_complement(primer)
         primer_len = len(primer)
         for overlap_len in range(overlap_min, overlap_max + 1):
-            for p3_distance in range(p3_distance_max + 1):
+            for p3_distance in range(p3_dist_max + 1):
                 end = primer_len - p3_distance
                 start = end - overlap_len
                 if start < 0:
@@ -199,10 +178,9 @@ def generate_primer_seq(
 
 def calc_tail_score(
     primer: str,
-    dimer_length_gc: dict[str, float],
     overlap_min: int,
     overlap_max: int,
-    p3_distance_max: int,
+    p3_dist_max: int,
 ) -> list[tuple[str, float]]:
     """Build a compressed view of a primer's own 3' tails with scores.
 
@@ -211,7 +189,7 @@ def calc_tail_score(
         dimer_length_gc: Tail -> 2**(len + GC).
         overlap_min: Min tail length.
         overlap_max: Max tail length.
-        p3_distance_max: Max offset from 3' end.
+        p3_dist_max: Max offset from 3' end.
 
     Returns:
         List of (tail, score) used for fast SADDLE accumulation.
@@ -227,7 +205,7 @@ def calc_tail_score(
 
         >>> dimer_length_gc = {"GC": 16.0, "TG": 8.0, "TGC": 32.0, "ATG": 16.0}
         >>> pre_calculate_primer_self_hash(
-        ...     "ATGC", dimer_length_gc, overlap_min=2, overlap_max=3, p3_distance_max=1
+        ...     "ATGC", dimer_length_gc, overlap_min=2, overlap_max=3, p3_dist_max=1
         ... )
         [('GC', 16.0), ('TG', 4.0), ('TGC', 32.0), ('ATG', 8.0)]
     """
@@ -235,20 +213,20 @@ def calc_tail_score(
     self_hash: list[tuple[str, float]] = []
 
     for overlap_len in range(overlap_min, overlap_max + 1):
-        for p3_distance in range(p3_distance_max + 1):
+        for p3_distance in range(p3_dist_max + 1):
             end = primer_len - p3_distance
             start = end - overlap_len
             if start < 0:
                 continue
             tail = primer[start:end]
             # if tail in dimer_length_gc:
-            score = dimer_length_gc[tail] / (p3_distance + 1.0)
+            score = _tail_score(tail) / (p3_distance + 1.0)
             self_hash.append((tail, score))
     return self_hash
 
 
 def calc_tailrc_weight(
-    primer: str, overlap_min: int, overlap_max: int, p3_distance_max: int
+    primer: str, overlap_min: int, overlap_max: int, p3_dist_max: int
 ) -> list[tuple[str, float]]:
     """Compute RC-tail deltas this primer contributes to the global hash.
 
@@ -256,7 +234,7 @@ def calc_tailrc_weight(
         primer: Primer (5'→3').
         overlap_min: Min RC-tail length.
         overlap_max: Max RC-tail length.
-        p3_distance_max: Max offset from 3' end.
+        p3_dist_max: Max offset from 3' end.
 
     Returns:
         List of (rc_tail, weight) entries used to update the global hash.
@@ -266,14 +244,14 @@ def calc_tailrc_weight(
         and p3 shifts up to 1, the affected RC tails and their weights are:
 
         >>> calc_tailrc_weight(
-        ...     "ATGC", overlap_min=2, overlap_max=3, p3_distance_max=1
+        ...     "ATGC", overlap_min=2, overlap_max=3, p3_dist_max=1
         ... )
         [('GC', 1.0), ('CA', 0.5), ('GCA', 1.0), ('CAT', 0.5)]
     """
     primer_rc = reverse_complement(primer)
     affected_hash: list[tuple[str, float]] = []
     for overlap_len in range(overlap_min, overlap_max + 1):
-        for p3_distance in range(p3_distance_max + 1):
+        for p3_distance in range(p3_dist_max + 1):
             start = p3_distance
             end = start + overlap_len
             if end > len(primer_rc):
@@ -285,7 +263,7 @@ def calc_tailrc_weight(
 
 
 def calc_selfloss(
-    primer: str, overlap_min: int, overlap_max: int, p3_distance_max: int
+    primer: str, overlap_min: int, overlap_max: int, p3_dist_max: int
 ) -> float:
     """Compute self-dimer loss by matching 3' tails vs RC 5' windows.
 
@@ -293,7 +271,7 @@ def calc_selfloss(
         primer: Primer (5'→3').
         overlap_min: Min overlap length.
         overlap_max: Max overlap length.
-        p3_distance_max: Max 3' shift for both strands.
+        p3_dist_max: Max 3' shift for both strands.
 
     Returns:
         Accumulated self-dimer loss.
@@ -305,7 +283,7 @@ def calc_selfloss(
         ``2 ** (len('GC') + GC('GC')) / ((0 + 1) * (0 + 1)) = 2 ** (2 + 2) = 16.0``.
 
         >>> calc_selfloss(
-        ...     "ATGC", overlap_min=2, overlap_max=3, p3_distance_max=1
+        ...     "ATGC", overlap_min=2, overlap_max=3, p3_dist_max=1
         ... )
         16.0
     """
@@ -314,14 +292,14 @@ def calc_selfloss(
     total_loss = 0.0
 
     for overlap_len in range(overlap_min, overlap_max + 1):
-        for p3_f in range(p3_distance_max + 1):
+        for p3_f in range(p3_dist_max + 1):
             end_f = primer_len - p3_f
             start_f = end_f - overlap_len
             if start_f < 0:
                 continue
             tail_f = primer[start_f:end_f]
 
-            for p3_r in range(p3_distance_max + 1):
+            for p3_r in range(p3_dist_max + 1):
                 start_r = p3_r
                 end_r = start_r + overlap_len
                 if end_r > primer_len:
@@ -336,11 +314,12 @@ def calc_selfloss(
 
 
 def update_tail_weight(
-    tail2weight: dict[str, float],
+    tail2weight: dict[str, float] | None = None,
+    *,
     old_primers: list[str],
     new_primers: list[str],
     primer2tailrc_weight: dict[str, list[tuple[str, float]]],
-) -> None:
+) -> dict:
     """Apply delta updates for removed then added primers.
 
     Args:
@@ -352,12 +331,15 @@ def update_tail_weight(
     Returns:
         The same dict, modified in place and returned for convenience.
     """
+    if tail2weight is None:
+        tail2weight = defaultdict(float)
     for primer in old_primers:
         for tail, delta in primer2tailrc_weight[primer]:
             tail2weight[tail] -= delta
     for primer in new_primers:
         for tail, delta in primer2tailrc_weight[primer]:
             tail2weight[tail] += delta
+    return tail2weight
 
 
 def calc_saddle_by_hash(
@@ -419,7 +401,6 @@ def load_primer_data(
         primer_info_pool: {gene -> [(design, seq_f, seq_r), ...]}
         primers:  Flattened list of all sequences for precomputation.
     """
-    print("Loading data...")
     df = pd.read_csv(input_, sep="\t")
     df.columns = ["gene", "design", "seq_f", "seq_r"]
     print(f"Loaded {len(df)} primer records")
@@ -452,7 +433,7 @@ def saddle(
     random_seed: int = 42,
     overlap_min: int = 4,
     overlap_max: int = 12,
-    p3_distance_max: int = 2,
+    p3_dist_max: int = 2,
     tolerance_factor: float = 1e6,
     reanneal_fraction: float = 0.5,
 ) -> int:
@@ -466,7 +447,7 @@ def saddle(
         random_seed: RNG seed.
         overlap_min: Minimum tail size for hashing (default: 4).
         overlap_max: Maximum tail size for hashing (default: 12).
-        p3_distance_max: Max 3' offset considered (default: 2).
+        p3_dist_max: Max 3' offset considered (default: 2).
         tolerance_factor: SA acceptance scale (default: 1_000_000.0).
         reanneal_fraction: Fraction of cycles for greedy re-anneal (default: 0.5).
 
@@ -484,44 +465,28 @@ def saddle(
     gene_total_design_list = [list(range(len(primer_info_pool[g]))) for g in genes]
     gene_idx_multi = [i for i, g in enumerate(genes) if len(primer_info_pool[g]) > 1]
 
-    print("Initialize hash tables...")
-    tail2weight_current = initialize_hash_table(
-        primers, overlap_min, overlap_max, p3_distance_max
-    )
-
-    dimer_length_gc = initialize_dimer_length_gc(
-        primers, overlap_min, overlap_max, p3_distance_max
-    )
-    print("Finish hash table initialization\n")
+    print("Initialize tail weights and scores and self losses...")
 
     primer2tail_score: dict[str, list[tuple[str, float]]] = {}
     primer2tailrc_weight: dict[str, list[tuple[str, float]]] = {}
     primer2selfloss: dict[str, float] = {}
 
-    print("Pre-calculate per-primer hashes...")
-    for p in tqdm(primers):
-        primer2tail_score[p] = calc_tail_score(
-            p, dimer_length_gc, overlap_min, overlap_max, p3_distance_max
-        )
+    for p in primers:
+        primer2tail_score[p] = calc_tail_score(p, overlap_min, overlap_max, p3_dist_max)
         primer2tailrc_weight[p] = calc_tailrc_weight(
-            p, overlap_min, overlap_max, p3_distance_max
+            p, overlap_min, overlap_max, p3_dist_max
         )
-        primer2selfloss[p] = calc_selfloss(p, overlap_min, overlap_max, p3_distance_max)
-    print("Finish pre-calculation\n")
+        primer2selfloss[p] = calc_selfloss(p, overlap_min, overlap_max, p3_dist_max)
 
     # To start with, we select the first design for each gene.
     current_primer_used = [0] * len(genes)
     primers_init = generate_primer_seq(genes, primer_info_pool, current_primer_used)
 
-    update_tail_weight(
-        tail2weight_current,
+    tail2weight_current = update_tail_weight(
         old_primers=[],
         new_primers=primers_init,
         primer2tailrc_weight=primer2tailrc_weight,
     )
-    # tail2weight_candidate = update_tail_weight(
-    #     tail2weight_candidate, [], primers_init, primer2tailrc_weight
-    # )
     tail2weight_candidate = deepcopy(tail2weight_current)
 
     current_saddle_loss = calc_saddle_by_hash(
@@ -534,7 +499,7 @@ def saddle(
     list_saddle_loss = [current_saddle_loss]
 
     print("Start annealing primers...")
-    for i in trange(num_cycles_anneal):
+    for i in range(num_cycles_anneal):
         # Randomly choose a gene that has more than 1 design.
         gene_idx = random.choice(gene_idx_multi)
         gene_id = genes[gene_idx]
@@ -590,10 +555,9 @@ def saddle(
                 primer2tailrc_weight=primer2tailrc_weight,
             )
             list_saddle_loss.append(current_saddle_loss)
-    print("Finish annealing\n")
 
     print("Start re-annealing (greedy)...")
-    for _ in trange(int(num_cycles_after)):
+    for _ in range(int(num_cycles_after)):
         gene_idx = random.choice(gene_idx_multi)
         gene_id = genes[gene_idx]
 
@@ -641,7 +605,7 @@ def saddle(
                 primer2tailrc_weight=primer2tailrc_weight,
             )
             list_saddle_loss.append(current_saddle_loss)
-    print("Finish re-annealing\nFinished!")
+    print("Finished!")
 
     loss_df = pd.DataFrame({"saddle_loss": list_saddle_loss})
     loss_df.to_csv(output_loss, sep="\t", index=False, header=False)

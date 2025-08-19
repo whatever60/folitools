@@ -111,37 +111,6 @@ def _tail_score(tail: str) -> float:
     return 2 ** (len(tail) + count_gc(tail))
 
 
-def init_hash_table(
-    primer_pool: list[str], overlap_min: int, overlap_max: int, p3_dist_max: int
-) -> dict[str, float]:
-    """Allocate a tail-hash with zeros for both tails and RC tails.
-
-    Args:
-        primer_pool: Primer sequences (5'→3').
-        overlap_min: Minimum overlap length to hash.
-        overlap_max: Maximum overlap length to hash.
-        p3_dist_max: Max offset from the 3' end to shift the tail.
-
-    Returns:
-        Mapping tail sequence -> 0.0 (ready to be incremented/decremented).
-    """
-    tail2weight_pool: dict[str, float] = {}
-    for primer in primer_pool:
-        rc = reverse_complement(primer)
-        primer_len = len(primer)
-        for overlap_len in range(overlap_min, overlap_max + 1):
-            for p3_distance in range(p3_dist_max + 1):
-                end = primer_len - p3_distance
-                start = end - overlap_len
-                if start < 0:
-                    continue
-                tail = primer[start:end]
-                rc_tail = rc[p3_distance : p3_distance + overlap_len]
-                tail2weight_pool[tail] = 0.0
-                tail2weight_pool[rc_tail] = 0.0
-    return tail2weight_pool
-
-
 def reverse_complement(sequence: str) -> str:
     """Return the reverse-complement of a DNA sequence (ACGT only)."""
     pool = {"A": "T", "T": "A", "C": "G", "G": "C"}

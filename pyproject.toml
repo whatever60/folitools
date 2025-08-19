@@ -29,6 +29,16 @@ dependencies = [
 
 [project.scripts]
 foli = "folitools.cli:app"
+foli-primer = "folitools.primer_selection.cli:app"
 
 [tool.uv]
 package = true
+
+[build-system]
+requires = ["uv_build>=0.8.11,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# keep local data out of built dists
+wheel-exclude  = ["src/folitools/primer_selection/data/**"]
+source-exclude = ["src/folitools/primer_selection/data/**"]

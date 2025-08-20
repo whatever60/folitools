@@ -42,7 +42,7 @@ def main() -> None:
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit a one-line JSON object: {\"sha256\": ..., \"path\": ...}",
+        help='Emit a one-line JSON object: {"sha256": ..., "path": ...}',
     )
     parser.add_argument(
         "--chunk-mb",
@@ -56,10 +56,7 @@ def main() -> None:
 
     if args.expect:
         if digest.lower() != args.expect.lower():
-            print(
-                f"SHA-256 mismatch for {args.file.name}: "
-                f"{digest} != {args.expect}"
-            )
+            print(f"SHA-256 mismatch for {args.file.name}: {digest} != {args.expect}")
             raise SystemExit(1)
 
     if args.json:

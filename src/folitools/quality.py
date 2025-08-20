@@ -29,12 +29,14 @@ def extract_q30_from_fastqc_zip(zip_path: Path, inner_txt_path: str) -> float:
             content = f.read().decode()
 
     match = re.search(
-        r'>>Per sequence quality scores.*?\n(.*?)>>END_MODULE',
+        r">>Per sequence quality scores.*?\n(.*?)>>END_MODULE",
         content,
         re.DOTALL,
     )
     if not match:
-        raise ValueError(f"'Per sequence quality scores' section not found in {zip_path}")
+        raise ValueError(
+            f"'Per sequence quality scores' section not found in {zip_path}"
+        )
 
     section = match.group(1).strip()
     df = pd.read_csv(StringIO(section), sep="\t", comment=">")
@@ -82,10 +84,10 @@ def deduplicate_umi(df: pl.DataFrame) -> pl.DataFrame:
     """
     return (
         df.select(["gene", "unique_id"])
-          .unique()
-          .group_by("gene")
-          .len()
-          .rename({"len": "umi_count"})
+        .unique()
+        .group_by("gene")
+        .len()
+        .rename({"len": "umi_count"})
     )
 
 
@@ -109,8 +111,10 @@ def count_read_pairs(bam_path: str) -> int:
         raise FileNotFoundError(f"BAM file not found: {bam_path}")
 
     # create two temp files for R1 and R2
-    with tempfile.NamedTemporaryFile(prefix="r1_", suffix=".fq", delete=False) as fwd, \
-         tempfile.NamedTemporaryFile(prefix="r2_", suffix=".fq", delete=False) as rev:
+    with (
+        tempfile.NamedTemporaryFile(prefix="r1_", suffix=".fq", delete=False) as fwd,
+        tempfile.NamedTemporaryFile(prefix="r2_", suffix=".fq", delete=False) as rev,
+    ):
         r1_path = fwd.name
         r2_path = rev.name
 
@@ -135,9 +139,7 @@ def count_read_pairs(bam_path: str) -> int:
         r1_count = _count_reads(r1_path)
         r2_count = _count_reads(r2_path)
 
-        assert r1_count == r2_count, (
-            f"Read pair mismatch: R1={r1_count}, R2={r2_count}"
-        )
+        assert r1_count == r2_count, f"Read pair mismatch: R1={r1_count}, R2={r2_count}"
         return r1_count
 
     finally:
@@ -251,9 +253,8 @@ class FoliQC:
             self.df_info_rest_all = df
 
             # reads with any primer
-            mask = (
-                (pl.col("primer_fwd") != "no_adapter")
-                & (pl.col("primer_rev") != "no_adapter")
+            mask = (pl.col("primer_fwd") != "no_adapter") & (
+                pl.col("primer_rev") != "no_adapter"
             )
             self.num_reads_primer = int(df.filter(mask).shape[0])
 

@@ -2,6 +2,7 @@ import math
 
 from cyclopts import run
 
+
 def allocate_pipeline_cores(total_cores: int) -> tuple[int, int]:
     """
     Calculates an optimal core allocation for a bioinformatics pipeline.

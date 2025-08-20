@@ -52,6 +52,7 @@ from cyclopts import App
 from .primer_selection import subset as _subset
 from .select_primer_set_by_saddle_loss import saddle as _saddle
 from .extract_region_sequence import product as _product
+from .make_excel import order as _order
 
 
 app = App(name="folitools-primer")
@@ -60,17 +61,17 @@ app = App(name="folitools-primer")
 @app.command
 def subset(
     *,
+    input_: Path,
     species: str,
     amplicon_size_range: tuple[int, int],
-    gene_table_file: Path,
-    output_dir: Path = Path("."),
+    output_dir: Path,
 ) -> int:
     """Run the subset stage (packaged Parquet → filtered TSVs).
 
     Args:
+        input_: TSV with columns: gene, group; optional primer_fwd, primer_rev.
         species: Species key (e.g., "mouse") mapping to packaged data.
         amplicon_size_range: Two integers MIN MAX. Example: `--amplicon-size-range 320 380`.
-        gene_table_file: TSV with columns: gene, group; optional primer_fwd, primer_rev.
         output_dir: Directory to write outputs (default: current directory).
 
     Returns:
@@ -79,7 +80,7 @@ def subset(
     return _subset(
         species=species,
         amplicon_size_range=amplicon_size_range,
-        gene_table_file=gene_table_file,
+        gene_table_file=input_,
         output_dir=output_dir,
     )
 
@@ -146,6 +147,30 @@ def product(
 
 
 @app.command
+def order(
+    *, input_: Path, primer_selection: Path, primer_info: Path, output: Path
+) -> int:
+    """Generate an Excel file for primer ordering.
+
+    Args:
+        input_: Path to gene info TSV file.
+        primer_selection: Path to selected primers TSV file.
+        primer_info: Path to candidate primer info TSV file.
+        output: Path to output Excel file (default: primer_to_order.xlsx).
+
+    Returns:
+        Process exit code.
+    """
+    _order(
+        str(input_),
+        str(primer_selection),
+        str(primer_info),
+        str(output),
+    )
+    return 0
+
+
+@app.command
 def workflow(
     *,
     input_: Path,  # gene table TSV
@@ -183,13 +208,12 @@ def workflow(
         return rc1
 
     # subset outputs
-    suffix = f"{amin}_{amax}"
-    primer_seq = output_dir / f"candidate_primer.{suffix}.primer_sequence.tsv"
-    primer_info = output_dir / f"candidate_primer.{suffix}.primer_info.tsv"
+    primer_seq = output_dir / "primer_sequence.tsv"
+    primer_info = output_dir / "primer_info.tsv"
 
     # 2) saddle
-    selected_tsv = output_dir / "output_selected.tsv"
-    loss_tsv = output_dir / "output_select.loss.txt"
+    selected_tsv = output_dir / "primer_sequence_selected.tsv"
+    loss_tsv = output_dir / "primer_sequence_selected_loss.txt"
     rc2 = saddle(
         input_=primer_seq,
         output=selected_tsv,
@@ -201,7 +225,7 @@ def workflow(
         return rc2
 
     # 3) product
-    region_fa = output_dir / "output_selected.region.fasta"
+    region_fa = output_dir / "amplicons.fasta"
     rc3 = _product(
         selected_tsv=selected_tsv,
         primer_info_tsv=primer_info,
@@ -209,7 +233,18 @@ def workflow(
         species=species,
         reference=reference,
     )
-    return rc3
+    if rc3 != 0:
+        return rc3
+
+    # 4) order (Excel output)
+    excel_out = output_dir / "primer_to_order.xlsx"
+    _order(
+        str(input_),
+        str(selected_tsv),
+        str(primer_info),
+        str(excel_out),
+    )
+    return 0
 
 
 def main() -> int:

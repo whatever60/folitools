@@ -4,6 +4,7 @@ from typing import TypeVar
 
 T = TypeVar("T")
 
+
 def choice_except(seq: Sequence[T], i: int, *, rng: random.Random | None = None) -> T:
     """Choose a random element from `seq` excluding the element at index `i`.
 
@@ -26,7 +27,7 @@ def choice_except(seq: Sequence[T], i: int, *, rng: random.Random | None = None)
         raise ValueError(f"Index i={i} out of range for sequence of length {n}.")
 
     # Uniformly sample an index from the n-1 allowable positions without copying.
-    randrange = (rng.randrange if rng else random.randrange)
+    randrange = rng.randrange if rng else random.randrange
     k = randrange(n - 1)
     if k >= j:
         k += 1

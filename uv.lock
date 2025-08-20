@@ -327,9 +327,6 @@ source = { editable = "." }
 dependencies = [
     { name = "biopython" },
     { name = "cyclopts" },
-    { name = "ipykernel" },
-    { name = "ipython" },
-    { name = "ipywidgets" },
     { name = "joblib" },
     { name = "matplotlib" },
     { name = "matplotlib-venn" },
@@ -348,7 +345,23 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
+notebook = [
+    { name = "ipykernel" },
+    { name = "ipython" },
+    { name = "ipywidgets" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.dev-dependencies]
+notebook = [
+    { name = "ipykernel" },
+    { name = "ipython" },
+    { name = "ipywidgets" },
+]
+test = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -357,9 +370,9 @@ dev = [
 requires-dist = [
     { name = "biopython", specifier = ">=1.85" },
     { name = "cyclopts", specifier = "==3.22.5" },
-    { name = "ipykernel", specifier = ">=6.29.5" },
-    { name = "ipython", specifier = ">=9.3.0" },
-    { name = "ipywidgets", specifier = ">=8.1.7" },
+    { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=6.29.5" },
+    { name = "ipython", marker = "extra == 'notebook'", specifier = ">=9.3.0" },
+    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.1.7" },
     { name = "joblib", specifier = ">=1.5.1" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "matplotlib-venn", specifier = ">=1.1.2" },
@@ -369,8 +382,8 @@ requires-dist = [
     { name = "polars", specifier = ">=1.31.0" },
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pysam", specifier = ">=0.23.3" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.1" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.4.1" },
+    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=6.2.1" },
     { name = "scikit-learn", specifier = ">=1.7.0" },
     { name = "scipy", specifier = ">=1.16.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
@@ -378,7 +391,18 @@ requires-dist = [
     { name = "umi-tools", specifier = ">=1.1.6" },
     { name = "wcmatch", specifier = ">=10.1" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["test", "notebook"]
+
+[package.metadata.requires-dev]
+notebook = [
+    { name = "ipykernel", specifier = ">=6.29.5" },
+    { name = "ipython", specifier = ">=9.3.0" },
+    { name = "ipywidgets", specifier = ">=8.1.7" },
+]
+test = [
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+]
 
 [[package]]
 name = "fonttools"

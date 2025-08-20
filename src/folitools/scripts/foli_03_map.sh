@@ -29,6 +29,30 @@ fi
 # GTF="$HOME/data/gencode/Gencode_mouse/release_M32/gencode.vM32.primary_assembly.annotation.gtf.gz"
 # GTF="$HOME/data/gencode/Gencode_human/release_46/gencode.v46.primary_assembly.annotation.gtf.gz"
 
+# Function to create mock featureCounts summary
+create_mock_summary() {
+    local input_bam="$1"
+    local output_summary="$2"
+    
+    cat > "$output_summary" << EOF
+Status	$input_bam
+Assigned	0
+Unassigned_Unmapped	0
+Unassigned_Read_Type	0
+Unassigned_Singleton	0
+Unassigned_MappingQuality	0
+Unassigned_Chimera	0
+Unassigned_FragmentLength	0
+Unassigned_Duplicate	0
+Unassigned_MultiMapping	0
+Unassigned_Secondary	0
+Unassigned_NonSplit	0
+Unassigned_NoFeatures	0
+Unassigned_Overlapping_Length	0
+Unassigned_Ambiguity	0
+EOF
+}
+
 # --- Directory Setup ---
 STAR_DIR="$OUTPUT_STAR"
 FEATURECOUNTS_DIR="$OUTPUT_BAM"
@@ -186,7 +210,12 @@ for fqR1 in "${fqr1s[@]}"; do
     if ! echo "$first_bam_line" | grep -q .; then
         cp "$STAR_DIR/${sample_name}/Aligned.out.bam" "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
         samtools index "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
-        touch "$FEATURECOUNTS_DIR/${sample_name}.log"
+        echo "Empty bam, featurecounts not run" > "$FEATURECOUNTS_DIR/${sample_name}.log"
+        # Mock featurecounts output
+        echo "# Program:featureCounts v2.0.3; Command:mock" > "$FEATURECOUNTS_DIR/${sample_name}.txt"
+        echo "Geneid\tChr\tStart\tEnd\tStrand\tLength\t$STAR_DIR/${sample_name}/Aligned.out.bam" >> "$FEATURECOUNTS_DIR/${sample_name}.txt"
+        # Mock featurecounts summary
+        create_mock_summary "$STAR_DIR/${sample_name}/Aligned.out.bam" "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
     else
         FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
         if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then

@@ -27,10 +27,15 @@ dependencies = [
     "wcmatch>=10.1",
 ]
 
-
 [project.scripts]
 foli = "folitools.cli:app"
 foli-primer = "folitools.primer_selection.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+]
 
 [tool.uv]
 package = true
@@ -43,3 +48,48 @@ build-backend = "uv_build"
 # keep local data out of built dists
 wheel-exclude  = ["src/folitools/primer_selection/data/**"]
 source-exclude = ["src/folitools/primer_selection/data/**"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-v --tb=short --strict-markers"
+testpaths = [
+    "tests",
+]
+python_files = [
+    "test_*.py",
+    "*_test.py",
+]
+python_classes = [
+    "Test*",
+]
+python_functions = [
+    "test_*",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+# Coverage settings when running with pytest-cov
+[tool.coverage.run]
+source = ["src/folitools"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

@@ -96,7 +96,6 @@ Key Data Structures:
 from collections import defaultdict
 import math
 import random
-from copy import deepcopy
 from pathlib import Path
 from functools import lru_cache
 
@@ -451,24 +450,23 @@ def saddle(
     current_primer_used = [0] * len(genes)
     primers_init = generate_primer_seq(genes, primer_info_pool, current_primer_used)
 
-    tail2weight_current = update_tail_weight(
+    tail2weight = update_tail_weight(
         old_primers=[],
         new_primers=primers_init,
         primer2tailrc_weight=primer2tailrc_weight,
     )
-    tail2weight_candidate = deepcopy(tail2weight_current)
 
     current_saddle_loss = calc_saddle_by_hash(
         primers=primers_init,
-        tail2weight=tail2weight_current,
+        tail2weight=tail2weight,
         primer2tail_score=primer2tail_score,
     ) + calc_saddle_self_loss(
         old_primers=[], new_primers=primers_init, primer2selfloss_table=primer2selfloss
     )
     list_saddle_loss = [current_saddle_loss]
 
-    print("Start annealing primers...")
-    for i in range(num_cycles_anneal):
+    print("Start simulated annealing...")
+    for i in range(num_cycles_anneal + num_cycles_after):
         # Randomly choose a gene that has more than 1 design.
         gene_idx = random.choice(gene_idx_multi)
         gene_id = genes[gene_idx]
@@ -483,7 +481,7 @@ def saddle(
         new_primer_used[gene_idx] = new_design
 
         update_tail_weight(
-            tail2weight_candidate,
+            tail2weight,
             old_primers=cur_primer_seq,
             new_primers=new_primer_seq,
             primer2tailrc_weight=primer2tailrc_weight,
@@ -491,7 +489,7 @@ def saddle(
 
         candidate_loss = calc_saddle_by_hash(
             primers=generate_primer_seq(genes, primer_info_pool, new_primer_used),
-            tail2weight=tail2weight_candidate,
+            tail2weight=tail2weight,
             primer2tail_score=primer2tail_score,
         ) + calc_saddle_self_loss(
             old_primers=cur_primer_seq,
@@ -500,80 +498,26 @@ def saddle(
         )
 
         loss_diff = candidate_loss - current_saddle_loss
-        accept = False
-        if loss_diff < 0:  # Always accept if loss is lower
+        if loss_diff < 0 or (
+            i < num_cycles_anneal  # The annealing phase
+            and random.random() < math.exp(-loss_diff / (tolerance_factor / (i + 1)))
+        ):
             accept = True
         else:
-            if random.random() < math.exp(-loss_diff / (tolerance_factor / (i + 1))):
-                accept = True
+            accept = False
+
         if accept:  # Accept, sync the change
             current_saddle_loss = candidate_loss
             current_primer_used = new_primer_used
-            update_tail_weight(
-                tail2weight_current,
-                old_primers=cur_primer_seq,
-                new_primers=new_primer_seq,
-                primer2tailrc_weight=primer2tailrc_weight,
-            )
-            list_saddle_loss.append(current_saddle_loss)
         else:  # Do not accept, reverse the change
             update_tail_weight(
-                tail2weight_candidate,
+                tail2weight,
                 old_primers=new_primer_seq,
                 new_primers=cur_primer_seq,
                 primer2tailrc_weight=primer2tailrc_weight,
             )
-            list_saddle_loss.append(current_saddle_loss)
+        list_saddle_loss.append(current_saddle_loss)
 
-    print("Start re-annealing (greedy)...")
-    for _ in range(int(num_cycles_after)):
-        gene_idx = random.choice(gene_idx_multi)
-        gene_id = genes[gene_idx]
-
-        cur_design = current_primer_used[gene_idx]
-        cur_primer_seq = list(primer_info_pool[gene_id][cur_design][1:])
-
-        new_design = choice_except(gene_total_design_list[gene_idx], cur_design)
-        new_primer_seq = list(primer_info_pool[gene_id][new_design][1:])
-
-        new_primer_used = current_primer_used[:]
-        new_primer_used[gene_idx] = new_design
-
-        update_tail_weight(
-            tail2weight_candidate,
-            old_primers=cur_primer_seq,
-            new_primers=new_primer_seq,
-            primer2tailrc_weight=primer2tailrc_weight,
-        )
-
-        candidate_loss = calc_saddle_by_hash(
-            primers=generate_primer_seq(genes, primer_info_pool, new_primer_used),
-            tail2weight=tail2weight_candidate,
-            primer2tail_score=primer2tail_score,
-        ) + calc_saddle_self_loss(
-            old_primers=cur_primer_seq,
-            new_primers=new_primer_seq,
-            primer2selfloss_table=primer2selfloss,
-        )
-
-        if candidate_loss < current_saddle_loss:
-            current_saddle_loss = candidate_loss
-            current_primer_used = new_primer_used
-            update_tail_weight(
-                tail2weight_current,
-                old_primers=cur_primer_seq,
-                new_primers=new_primer_seq,
-                primer2tailrc_weight=primer2tailrc_weight,
-            )
-            list_saddle_loss.append(current_saddle_loss)
-        else:
-            update_tail_weight(
-                tail2weight_candidate,
-                old_primers=new_primer_seq,
-                new_primers=cur_primer_seq,
-                primer2tailrc_weight=primer2tailrc_weight,
-            )
-            list_saddle_loss.append(current_saddle_loss)
     print("Finished!")
 
     loss_df = pd.DataFrame({"saddle_loss": list_saddle_loss})

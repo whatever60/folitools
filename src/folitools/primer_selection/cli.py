@@ -49,10 +49,10 @@ from typing import Literal
 
 from cyclopts import App
 
-from .primer_selection import subset as _subset
-from .select_primer_set_by_saddle_loss import saddle as _saddle
-from .extract_region_sequence import product as _product
-from .make_excel import summary as _summary
+from ._01_primer_selection import subset as _subset
+from ._02_select_primer_set_by_saddle_loss import saddle as _saddle
+from ._03_extract_region_sequence import product as _product
+from ._04_make_excel import summary as _summary
 
 
 app = App(name="folitools-primer")

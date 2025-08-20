@@ -231,7 +231,9 @@ for fqR1 in "${fqr1s[@]}"; do
             -T "$((FC_THREADS - 1))" \
             -a "$GTF_PATH" \
             -o "$FEATURECOUNTS_DIR/${sample_name}.txt" \
-            -p -B -C \
+            -p \
+            --countReadPairs \
+            -B -C \
             --donotsort \
             -R BAM \
             --Rpath "$FEATURECOUNTS_DIR/" \

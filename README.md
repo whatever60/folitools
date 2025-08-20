@@ -125,8 +125,6 @@ Output files:
 
 ## TODO
 
-- Add QC report code (need refactoring)
+- Add QC report code that summarizes all metrics into a table (need refactoring)
 - Add probe set design code
-- Rarefying curves
-- Primer set evaluation
-- Move seqkit, fastQC and STAR index loading to their own modules?
+- Primer set evaluation (fasta recover and primer dimer)

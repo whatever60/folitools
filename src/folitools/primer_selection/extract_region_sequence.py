@@ -25,7 +25,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from .data_dir_resolve import _data_dir_for_species
+from .utils import resolve_reference_path
 
 
 def _open_fasta_auto(path: Path):
@@ -144,14 +144,10 @@ def product(
 
     primer_df = load_primer_info(primer_info_tsv)
 
-    species_map: dict[str, str] = {
-        "mouse": "Mus_musculus.GRCm39.transcript.fasta.gz",
-        "human": "Homo_sapiens.GRCh38.transcript.fasta.gz",
-    }
     if species is not None:
-        ref_path = _data_dir_for_species(species) / species_map[species]
+        ref_path = resolve_reference_path(None, species)
     elif reference is not None:
-        ref_path = reference
+        ref_path = resolve_reference_path(reference, None)
     else:
         raise ValueError("Either species or reference must be provided.")
     transcript_pool = load_reference_transcripts(ref_path)

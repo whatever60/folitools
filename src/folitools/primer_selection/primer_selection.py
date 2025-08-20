@@ -246,11 +246,36 @@ def _post_filter_by_explicit_primers(
     return info_f, seq_f
 
 
+def _validate_output_file_extensions(*file_paths: Path) -> None:
+    """Validate that output file paths have acceptable extensions.
+
+    Args:
+        *file_paths: Variable number of Path objects to validate.
+
+    Raises:
+        ValueError: If any file path doesn't end with an acceptable extension.
+    """
+    valid_extensions = {".tsv", ".txt", ".tsv.gz", ".txt.gz"}
+
+    for file_path in file_paths:
+        # Handle compressed files (.tsv.gz, .txt.gz)
+        if len(file_path.suffixes) >= 2 and file_path.suffixes[-2] in {".tsv", ".txt"}:
+            ext = "".join(file_path.suffixes[-2:])
+        else:
+            ext = file_path.suffix
+
+        if ext not in valid_extensions:
+            raise ValueError(
+                f"Output file '{file_path}' must end with one of {valid_extensions}, got: {ext}"
+            )
+
+
 def subset(
     species: str,
     amplicon_size_range: tuple[int, int],
     gene_table_file: Path,
-    output_dir: Path = Path("."),
+    output_primer_sequence: Path,
+    output_primer_info: Path,
 ) -> int:
     """Run the subset operation end-to-end.
 
@@ -259,7 +284,8 @@ def subset(
         amplicon_size_range: Range like "320-380" (also accepts "320:380").
         gene_table_file: Path to the user TSV with columns ``gene`` and ``group``,
             optionally ``primer_fwd`` and ``primer_rev``.
-        output_dir: Directory to write the three TSV outputs.
+        output_primer_sequence: Path to write primer sequence TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
+        output_primer_info: Path to write primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
 
     Returns:
         Exit code: 0 on success.
@@ -271,6 +297,9 @@ def subset(
     # amin, amax = _parse_amplicon_size_range(amplicon_size_range)
     amin, amax = amplicon_size_range
 
+    # Validate output file extensions
+    _validate_output_file_extensions(output_primer_sequence, output_primer_info)
+
     # Resolve packaged inputs
     suffix = f"{amin}_{amax}"
     data_dir = _data_dir_for_species(species)
@@ -281,12 +310,9 @@ def subset(
         if not p.exists():
             raise FileNotFoundError(f"Packaged input not found: {p}")
 
-    # Ensure output dir exists
-    output_dir.mkdir(parents=True, exist_ok=True)
-    suffix = f"{amin}_{amax}"
-    out_seq = output_dir / f"candidate_primer.{suffix}.primer_sequence.tsv"
-    out_info = output_dir / f"candidate_primer.{suffix}.primer_info.tsv"
-    # out_tx = output_dir / f"candidate_primer.{suffix}.transcript_metadata.tsv"
+    # Ensure output directories exist
+    output_primer_sequence.parent.mkdir(parents=True, exist_ok=True)
+    output_primer_info.parent.mkdir(parents=True, exist_ok=True)
 
     # Load inputs
     transcript_df = pl.read_parquet(p_tx).to_pandas()
@@ -327,12 +353,12 @@ def subset(
             )
 
     # Save outputs
-    seq_f.to_csv(out_seq, sep="\t", index=False)
-    info_f.to_csv(out_info, sep="\t", index=False)
+    seq_f.to_csv(output_primer_sequence, sep="\t", index=False)
+    info_f.to_csv(output_primer_info, sep="\t", index=False)
     # tx_f.to_csv(out_tx, sep="\t", index=False)
 
-    print(f"Wrote: {out_seq}")
-    print(f"Wrote: {out_info}")
+    print(f"Wrote: {output_primer_sequence}")
+    print(f"Wrote: {output_primer_info}")
     # print(f"Wrote: {out_tx}")
     print("Subset complete.")
     return 0

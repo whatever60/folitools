@@ -1,7 +1,9 @@
 import pandas as pd
 
+from .utils import get_prefixes
 
-def order(
+
+def summary(
     input_: str,
     primer_selection: str,
     primer_info: str,
@@ -58,12 +60,7 @@ def order(
     # amplicon_index  L_seq  R_seq  primer_sequence_to_order_forward  primer_sequence_to_order_reverse
     # ENSMUST00000001184_0  TTTTCACCTACCCCTGCTGTGTTCG  GCAGGGAGACAAAACACTGTAGCCA  CCTACACGACGCTCTTCCGATCTNNNNNNTTTTCACCTACCCCTGCTGTGTTCG  TCAGACGTGTGCTCTTCCGATCTNNNNNNGCAGGGAGACAAAACACTGTAGCCA
     # ENSMUST00000001184_1  CATCAGGTCTGTTCACTGCACCCAA  ACAGTGACTCAGTCCAGCTTCCAGA  CCTACACGACGCTCTTCCGATCTNNNNNNCATCAGGTCTGTTCACTGCACCCAA  TCAGACGTGTGCTCTTCCGATCTNNNNNNACAGTGACTCAGTCCAGCTTCCAGA
-    if has_linker:
-        FWD_PREFIX = "CCTACACGACGCTCTTCCGATCTNNNNNNACATCA"
-        REV_PREFIX = "TCAGACGTGTGCTCTTCCGATCTNNNNNNATAGTT"
-    else:
-        FWD_PREFIX = "CCTACACGACGCTCTTCCGATCTNNNNNN"
-        REV_PREFIX = "TCAGACGTGTGCTCTTCCGATCTNNNNNN"
+    FWD_PREFIX, REV_PREFIX = get_prefixes(has_linker)
 
     res_df["primer_sequence_to_order_forward"] = FWD_PREFIX + res_df["L_seq"]
     res_df["primer_sequence_to_order_reverse"] = REV_PREFIX + res_df["R_seq"]

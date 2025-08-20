@@ -533,6 +533,17 @@ def recover(
     amplicon_sub = amplicon_all[
         amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
     ].copy()
+    # Sanity check: Check the number of genes amplified by each primer pair
+    logger.info(
+        amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])["gene_id"]
+        .nunique()
+        .value_counts()
+    )
+    # Sanity check: Number of amplicons formed by each primer pair
+    logger.info(amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"]).size())
+    # Sanity check: Cross-pool amplicon (i.e., the two primers of the amplicon are in different pools)
+    logger.info((amplicon_sub["pool_fwd"] == amplicon_sub["pool_rev"]).mean())
+
 
     # Group per primer pair and construct final sheet
     grouped = _group_pairs(amplicon_sub)

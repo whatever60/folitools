@@ -54,6 +54,7 @@ def make_report(
         plt.close(fig1)
 
         # Page 2: venn of primers
+        # Sanity check: The venn diagram is to check whether all primers are involved in at least one amplicon.
         fig2, ax2 = plt.subplots(figsize=(5, 5))
         primers_amp = set(amplicon_sub["primer_seq_fwd"].tolist()) | set(
             amplicon_sub["primer_seq_rev"].tolist()

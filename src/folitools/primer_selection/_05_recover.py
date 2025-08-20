@@ -104,14 +104,6 @@ def _classify_primers(
         )
 
     primer_df = pd.DataFrame(primers)
-    # Sanity: primer gene-specific sequences should be unique
-    dup_counts = primer_df["primer_seq"].value_counts()
-    dups = dup_counts[dup_counts > 1]
-    if not dups.empty:
-        logger.warning(
-            "Duplicate primer gene sequences detected: %s",
-            ", ".join(dups.index.tolist()),
-        )
     return primer_df
 
 
@@ -210,27 +202,7 @@ def _enrich_locate_df(
         ]
     ].copy()
 
-    # Sanity check: Ideally, no duplicate primer_seq and transcript_id pairs. In reality,
-    # a primer sequence can bind to multiple locations on the same transcript if the
-    # transcript sequence is repetitive.
-    for (primer_seq, transcript_id), group in locate_df_final.groupby(
-        ["primer_seq", "transcript_id"]
-    ):
-        if len(group) > 1:
-            logger.info(
-                f"Duplicate match found for primer sequence {primer_seq} and transcript ID "
-                f"{transcript_id}: {len(group)} matches."
-            )
-    # Sanity check: Ideally, a primer_seq matches to one gene_id only. In reality, a
-    # primer sequence could bind to multiple locations on multiple transcripts of the same gene.
-    for primer_seq, group in locate_df_final.groupby("primer_seq"):
-        gene_ids = group["gene_id"].unique()
-        if len(gene_ids) > 1:
-            logger.info(
-                f"Primer sequence {primer_seq} matches to {len(gene_ids)} different gene "
-                f"IDs: {', '.join(gene_ids)}."
-            )
-    return merged
+    return locate_df_final
 
 
 def _build_amplicons(locate_final: pd.DataFrame) -> pd.DataFrame:
@@ -455,6 +427,187 @@ def _build_summary_df(
     return df_out[cols].copy()
 
 
+def _sanity_check_primer_duplicates(primer_info: pd.DataFrame) -> None:
+    """Sanity check: primer gene-specific sequences should be unique"""
+    dup_counts = primer_info["primer_seq"].value_counts()
+    dups = dup_counts[dup_counts > 1]
+    if not dups.empty:
+        logger.warning("Duplicate primer gene-specific sequences detected:")
+        for seq, count in dups.items():
+            logger.warning("  Sequence '%s' appeared %d times", seq, count)
+
+
+def _sanity_check_sequence_uniqueness(primer_seqs: list[str]) -> None:
+    """Sanity check: Are primer sequences unique?"""
+    vc = pd.Series(primer_seqs).value_counts()
+    duplicated_primers = vc[vc > 1]
+    if not duplicated_primers.empty:
+        logger.info(
+            "Sanity check - Duplicate primer sequences found (sequence -> count):"
+        )
+        for seq, count in duplicated_primers.items():
+            logger.info("  %s: %d occurrences", seq, count)
+    else:
+        logger.info("Sanity check - ✅ All primer sequences are unique")
+
+
+def _sanity_check_seqkit_patterns(locate_df: pd.DataFrame) -> None:
+    """Sanity check: Number of matches in the transcriptome for each primer. We could 
+    see some primers have thousands of matches.
+    """
+    vc = pd.Series(locate_df["pattern"]).value_counts()
+    duplicated_patterns = vc[vc > 1]
+    if not duplicated_patterns.empty:
+        logger.info(
+            "Sanity check - Duplicate patterns found in seqkit locate output (pattern -> count):"
+        )
+        for pattern, count in duplicated_patterns.items():
+            logger.info("  %s: %d occurrences", pattern, count)
+    else:
+        logger.info("Sanity check - ✅ All seqkit locate patterns are unique")
+
+
+def _sanity_check_multi_location_binding(locate_df_final: pd.DataFrame) -> None:
+    """Sanity check: Ideally, no duplicate primer_seq and transcript_id pairs. In reality,
+    a primer sequence can bind to multiple locations on the same transcript if the
+    transcript sequence is repetitive.
+    """
+    logger.info(
+        "Sanity check - Checking for primers binding to multiple locations on the same transcript:"
+    )
+    multi_location_count = 0
+    for (primer_seq, transcript_id), group in locate_df_final.groupby(
+        ["primer_seq", "transcript_id"]
+    ):
+        if len(group) > 1:
+            multi_location_count += 1
+            logger.info(
+                "  Primer %s binds to %d locations on transcript %s",
+                primer_seq,
+                len(group),
+                transcript_id,
+            )
+    if multi_location_count == 0:
+        logger.info("  ✅ No primers bind to multiple locations on the same transcript")
+
+
+def _sanity_check_multi_gene_binding(locate_df_final: pd.DataFrame) -> None:
+    """Sanity check: Ideally, a primer_seq matches to one gene_id only. In reality, a
+    primer sequence could bind to multiple locations on multiple transcripts of the same gene.
+    """
+    logger.info("Sanity check - Checking for primers binding to multiple genes:")
+    multi_gene_count = 0
+    for primer_seq, group in locate_df_final.groupby("primer_seq"):
+        gene_ids = group["gene_id"].unique()
+        if len(gene_ids) > 1:
+            multi_gene_count += 1
+            logger.info(
+                "  Primer %s binds to %d different genes: %s",
+                primer_seq,
+                len(gene_ids),
+                ", ".join(gene_ids),
+            )
+    if multi_gene_count == 0:
+        logger.info("  ✅ All primers bind to only one gene each")
+
+
+def _sanity_check_sequence_lengths(locate_df_final: pd.DataFrame) -> None:
+    """Sanity check: All primer sequences match their lengths.
+    """
+    logger.info(
+        "Sanity check - Verifying primer sequence lengths match locate results:"
+    )
+    length_matches = (
+        (locate_df_final["end"] - locate_df_final["start"] + 1)
+        == locate_df_final["primer_seq"].str.len()
+    ).all()
+    if length_matches:
+        logger.info("  ✅ All primer sequence lengths match their locate positions")
+    else:  # If there is abnormal length, it is an error
+        raise ValueError("  ⚠️ Some primer sequence lengths do not match their locate positions!")
+
+
+def _sanity_check_genes_per_primer_pair(amplicon_sub: pd.DataFrame) -> None:
+    """Sanity check: Check the number of genes amplified by each primer pair.
+    """
+    logger.info("Sanity check - Analyzing genes amplified per primer pair:")
+    genes_per_pair = amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])[
+        "gene_id"
+    ].nunique()
+    gene_count_distribution = genes_per_pair.value_counts()
+    if not gene_count_distribution.empty:
+        logger.info("  Distribution of gene counts per primer pair:")
+        for gene_count, pair_count in gene_count_distribution.items():
+            logger.info("    %d gene(s): %d primer pairs", gene_count, pair_count)
+    else:
+        logger.info("  No primer pairs found")
+
+
+def _sanity_check_amplicons_per_pair(amplicon_sub: pd.DataFrame) -> None:
+    """Sanity check: Number of amplicons formed by each primer pair.
+    """
+    logger.info("Sanity check - Analyzing amplicons formed per primer pair:")
+    amplicons_per_pair = amplicon_sub.groupby(
+        ["primer_seq_fwd", "primer_seq_rev"]
+    ).size()
+    if not amplicons_per_pair.empty:
+        logger.info("  Amplicon counts per primer pair:")
+        for i, ((fwd, rev), count) in enumerate(amplicons_per_pair.head(10).items()):
+            logger.info("    Pair %d: %d amplicons", i + 1, count)
+        if len(amplicons_per_pair) > 10:
+            logger.info(
+                "    ... and %d more primer pairs", len(amplicons_per_pair) - 10
+            )
+        logger.info(
+            "  Summary: min=%d, max=%d amplicons per pair",
+            amplicons_per_pair.min(),
+            amplicons_per_pair.max(),
+        )
+    else:
+        logger.info("  No amplicons found")
+
+
+def _sanity_check_cross_pool_amplicons(amplicon_sub: pd.DataFrame) -> None:
+    """Sanity check: Cross-pool amplicon (i.e., the two primers of the amplicon are in 
+    different pools)
+    """
+    logger.info("Sanity check - Checking for cross-pool amplicons:")
+    same_pool_ratio = (amplicon_sub["pool_fwd"] == amplicon_sub["pool_rev"]).mean()
+    total_amplicons = len(amplicon_sub)
+    same_pool_count = int(same_pool_ratio * total_amplicons)
+    cross_pool_count = total_amplicons - same_pool_count
+    logger.info("  Total amplicons: %d", total_amplicons)
+    logger.info(
+        "  Same pool (both primers): %d (%.1f%%)",
+        same_pool_count,
+        same_pool_ratio * 100,
+    )
+    logger.info(
+        "  Cross pool (different pools): %d (%.1f%%)",
+        cross_pool_count,
+        (1 - same_pool_ratio) * 100,
+    )
+
+
+def _sanity_check_primer_pair_relationships(grouped: pd.DataFrame) -> None:
+    """Sanity check: Ideally, it should be a one-to-one relation between forward and 
+    reverse primers.
+    """
+    logger.info("Sanity check - Checking primer pair relationships:")
+    fwd_max_usage = (
+        grouped["primer_seq_fwd"].value_counts().max() if not grouped.empty else 0
+    )
+    rev_max_usage = (
+        grouped["primer_seq_rev"].value_counts().max() if not grouped.empty else 0
+    )
+    if fwd_max_usage <= 1 and rev_max_usage <= 1:
+        logger.info("  ✅ One-to-one primer relationships maintained")
+    else:
+        logger.info("  ⚠️ Some primers are reused in multiple pairs")
+        logger.info("  Maximum times a forward primer is used: %d", fwd_max_usage)
+        logger.info("  Maximum times a reverse primer is used: %d", rev_max_usage)
+
+
 def recover(
     order_excel: Path | str,
     txome_fasta: Path | None = None,
@@ -509,23 +662,20 @@ def recover(
     primer_info = _classify_primers(
         _read_idt_excel(order_excel), fwd_prefix, rev_prefix
     )
+    _sanity_check_primer_duplicates(primer_info)
 
     # Locate patterns in the transcriptome
     primer_seqs = primer_info["primer_seq"].astype(str).str.upper().tolist()
-    # Sanity check: Are primer sequences unique?
-    vc = pd.Series(primer_seqs).value_counts()
-    logger.info(vc[vc > 1])
+    _sanity_check_sequence_uniqueness(primer_seqs)
+
     locate_df = _run_seqkit_locate(primer_seqs, ref_path, threads=threads)
-    vc = pd.Series(locate_df["pattern"]).value_counts()
-    logger.info(vc[vc > 1])
+    _sanity_check_seqkit_patterns(locate_df)
 
     # Enrich locate dataframe
     locate_df_final = _enrich_locate_df(locate_df, primer_info)
-    # Sanity check: All primer sequences match their lengths.
-    assert (
-        (locate_df_final["end"] - locate_df_final["start"] + 1)
-        == locate_df_final["primer_seq"].str.len()
-    ).all()
+    _sanity_check_multi_location_binding(locate_df_final)
+    _sanity_check_multi_gene_binding(locate_df_final)
+    _sanity_check_sequence_lengths(locate_df_final)
 
     # Enumerate and filter amplicons
     amplicon_all = _build_amplicons(locate_df_final)
@@ -533,25 +683,14 @@ def recover(
     amplicon_sub = amplicon_all[
         amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
     ].copy()
-    # Sanity check: Check the number of genes amplified by each primer pair
-    logger.info(
-        amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])["gene_id"]
-        .nunique()
-        .value_counts()
-    )
-    # Sanity check: Number of amplicons formed by each primer pair
-    logger.info(amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"]).size())
-    # Sanity check: Cross-pool amplicon (i.e., the two primers of the amplicon are in different pools)
-    logger.info((amplicon_sub["pool_fwd"] == amplicon_sub["pool_rev"]).mean())
-
+    _sanity_check_genes_per_primer_pair(amplicon_sub)
+    _sanity_check_amplicons_per_pair(amplicon_sub)
+    _sanity_check_cross_pool_amplicons(amplicon_sub)
 
     # Group per primer pair and construct final sheet
     grouped = _group_pairs(amplicon_sub)
-    # Sanity check: Ideally, it should be a one-to-one relation between forward and reverse primers.
-    logger.info(
-        grouped["primer_seq_fwd"].value_counts().max(),
-        grouped["primer_seq_rev"].value_counts().max(),
-    )
+    _sanity_check_primer_pair_relationships(grouped)
+
     summary_df = _build_summary_df(grouped, fwd_prefix, rev_prefix, chosen_index=0)
 
     # Output artifacts

@@ -236,13 +236,15 @@ for fqR1 in "${fqr1s[@]}"; do
         read SORT_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((THREADS - 1))")
         
         # Use temporary file for BAM output to allow safe overwriting
+        TEMP_FC_TXT="$FEATURECOUNTS_DIR/_${sample_name}.txt"
         TEMP_BAM="$FEATURECOUNTS_DIR/_${sample_name}.sorted.bam"
+        FINAL_FC_TXT="$FEATURECOUNTS_DIR/${sample_name}.txt"
         FINAL_BAM="$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
         
         featureCounts \
             -T "$((FC_THREADS - 1))" \
             -a "$GTF_PATH" \
-            -o "$FEATURECOUNTS_DIR/${sample_name}.txt" \
+            -o "$TEMP_FC_TXT" \
             -p \
             --countReadPairs \
             -B -C \
@@ -266,18 +268,19 @@ for fqR1 in "${fqr1s[@]}"; do
         & \
         wait
         
+        rm -f $FIFO
+
         # Check if the temporary BAM file was created successfully
         if [[ ! -f "$TEMP_BAM" ]]; then
             echo "ERROR: Failed to create output BAM file: $TEMP_BAM" >&2
-            rm -f "$TEMP_BAM" "$TEMP_BAM.bai" $FIFO
             exit 1
         fi
         
         # Move temporary files to final location (allows overwriting)
         mv "$TEMP_BAM" "$FINAL_BAM"
         mv "$TEMP_BAM.bai" "$FINAL_BAM.bai"
-        
-        rm -f $FIFO
+        mv "$TEMP_FC_TXT" "$FINAL_FC_TXT"
+        mv "$TEMP_FC_TXT.summary" "$FINAL_FC_TXT.summary"
         rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
     fi
     

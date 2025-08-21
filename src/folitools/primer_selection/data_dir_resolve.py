@@ -4,7 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import as_file, files
 from pathlib import Path
 
-from folitools.primer_selection.data_fetch import _default_cache_root, ensure_dataset
+from .data_fetch import _default_cache_root, ensure_dataset
 
 
 # Dataset metadata (bump when you publish a new artifact)
@@ -31,7 +31,7 @@ def _materialize_packaged_base() -> Path | None:
     Returns:
         Path to the packaged data directory, or ``None`` if no packaged data exists.
     """
-    trav = files("folitools.primer_selection").joinpath("data")
+    trav = files(__package__).joinpath("data")
     if not trav.exists():
         return None
 

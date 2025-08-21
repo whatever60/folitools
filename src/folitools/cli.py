@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from pathlib import Path
 import subprocess
 import sys
@@ -135,6 +135,13 @@ def map_(
             help="Total number of cores to allocate for the pipeline.",
         ),
     ] = 8,
+    strand: Annotated[
+        Literal[0, 1, 2],
+        Parameter(
+            "--strand",
+            help="Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded).",
+        ),
+    ] = 0,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
     delete: Annotated[
         bool, Parameter(help="Delete input files after processing")
@@ -156,6 +163,7 @@ def map_(
             str(cores),
             str(skip),
             str(delete),
+            str(strand),
         ),
     )
 

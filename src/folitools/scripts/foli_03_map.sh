@@ -10,9 +10,10 @@ GTF_PATH="${5:-}"
 THREADS="${6:-1}"
 SKIP="${7:-0}"
 DELETE="${8:-false}"
+STRAND="${9:-0}"
 
 if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$OUTPUT_STAR" || -z "$STAR_INDEX" || -z "$GTF_PATH" ]]; then
-    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete]"
+    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete] [strand]"
     echo "  input_files    : Space-separated list of R1 FASTQ file paths"
     echo "  output_bam_dir : Output directory for BAM files"
     echo "  output_star_dir: Output directory for STAR files"
@@ -21,6 +22,13 @@ if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$OUTPUT_STAR" || -z "$STAR_IN
     echo "  threads        : Number of threads (default: 1)"
     echo "  skip           : Number of samples to skip (default: 0)"
     echo "  delete         : Delete input files after processing (default: false)"
+    echo "  strand         : Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded) (default: 0)"
+    exit 1
+fi
+
+# Validate strand parameter
+if [[ ! "$STRAND" =~ ^[0-2]$ ]]; then
+    echo "ERROR: strand parameter must be 0, 1, or 2"
     exit 1
 fi
 
@@ -188,8 +196,7 @@ for fqR1 in "${fqr1s[@]}"; do
     # -B: Only count reads that are properly paired
     # -C: Do not count read pairs that have two ends mapping to different chromosomes or 
     #   mapping to the same chromosome but on different strands.
-    # Arguments that might be relevant but we leave as default:
-    # -s 0: Strand specificity (0 = unstranded, 1 = stranded, 2 = reversely stranded)
+    # -s: Strand specificity (0 = unstranded, 1 = stranded, 2 = reversely stranded)
     # -t exon: Use exon feature type for counting
     # -g gene_id: Use gene_id attribute for counting
     # Note that setting -R/--Rpath is not allowed when featureCounts reads BAM/SAM from stdin.
@@ -227,6 +234,11 @@ for fqR1 in "${fqr1s[@]}"; do
         mkfifo "$FIFO"
         # If not empty, run featureCounts and sambamba sort
         read SORT_THREADS FC_THREADS < <(python -m folitools.scripts.foli_03_map_utils --total-cores "$((THREADS - 1))")
+        
+        # Use temporary file for BAM output to allow safe overwriting
+        TEMP_BAM="$FEATURECOUNTS_DIR/_${sample_name}.sorted.bam"
+        FINAL_BAM="$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
+        
         featureCounts \
             -T "$((FC_THREADS - 1))" \
             -a "$GTF_PATH" \
@@ -234,6 +246,7 @@ for fqR1 in "${fqr1s[@]}"; do
             -p \
             --countReadPairs \
             -B -C \
+            -s "$STRAND" \
             --donotsort \
             -R BAM \
             --Rpath "$FEATURECOUNTS_DIR/" \
@@ -247,11 +260,23 @@ for fqR1 in "${fqr1s[@]}"; do
         sambamba sort \
             --nthreads "$SORT_THREADS" \
             --memory-limit 16GB \
-            --out "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam" \
+            --out "$TEMP_BAM" \
             /dev/stdin \
             2> /dev/null \
         & \
         wait
+        
+        # Check if the temporary BAM file was created successfully
+        if [[ ! -f "$TEMP_BAM" ]]; then
+            echo "ERROR: Failed to create output BAM file: $TEMP_BAM" >&2
+            rm -f "$TEMP_BAM" "$TEMP_BAM.bai" $FIFO
+            exit 1
+        fi
+        
+        # Move temporary files to final location (allows overwriting)
+        mv "$TEMP_BAM" "$FINAL_BAM"
+        mv "$TEMP_BAM.bai" "$FINAL_BAM.bai"
+        
         rm -f $FIFO
         rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
     fi

@@ -23,6 +23,7 @@ dependencies = [
     "umi-tools>=1.1.6",
     "wcmatch>=10.1",
     "openpyxl",
+    "primer3-py>=2.2.0",
 ]
 
 # --- uv dependency groups ---

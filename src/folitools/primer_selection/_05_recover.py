@@ -452,7 +452,7 @@ def _sanity_check_sequence_uniqueness(primer_seqs: list[str]) -> None:
 
 
 def _sanity_check_seqkit_patterns(locate_df: pd.DataFrame) -> None:
-    """Sanity check: Number of matches in the transcriptome for each primer. We could 
+    """Sanity check: Number of matches in the transcriptome for each primer. We could
     see some primers have thousands of matches.
     """
     vc = pd.Series(locate_df["pattern"]).value_counts()
@@ -512,8 +512,7 @@ def _sanity_check_multi_gene_binding(locate_df_final: pd.DataFrame) -> None:
 
 
 def _sanity_check_sequence_lengths(locate_df_final: pd.DataFrame) -> None:
-    """Sanity check: All primer sequences match their lengths.
-    """
+    """Sanity check: All primer sequences match their lengths."""
     logger.info(
         "Sanity check - Verifying primer sequence lengths match locate results:"
     )
@@ -524,12 +523,13 @@ def _sanity_check_sequence_lengths(locate_df_final: pd.DataFrame) -> None:
     if length_matches:
         logger.info("  ✅ All primer sequence lengths match their locate positions")
     else:  # If there is abnormal length, it is an error
-        raise ValueError("  ⚠️ Some primer sequence lengths do not match their locate positions!")
+        raise ValueError(
+            "  ⚠️ Some primer sequence lengths do not match their locate positions!"
+        )
 
 
 def _sanity_check_genes_per_primer_pair(amplicon_sub: pd.DataFrame) -> None:
-    """Sanity check: Check the number of genes amplified by each primer pair.
-    """
+    """Sanity check: Check the number of genes amplified by each primer pair."""
     logger.info("Sanity check - Analyzing genes amplified per primer pair:")
     genes_per_pair = amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])[
         "gene_id"
@@ -544,8 +544,7 @@ def _sanity_check_genes_per_primer_pair(amplicon_sub: pd.DataFrame) -> None:
 
 
 def _sanity_check_amplicons_per_pair(amplicon_sub: pd.DataFrame) -> None:
-    """Sanity check: Number of amplicons formed by each primer pair.
-    """
+    """Sanity check: Number of amplicons formed by each primer pair."""
     logger.info("Sanity check - Analyzing amplicons formed per primer pair:")
     amplicons_per_pair = amplicon_sub.groupby(
         ["primer_seq_fwd", "primer_seq_rev"]
@@ -568,7 +567,7 @@ def _sanity_check_amplicons_per_pair(amplicon_sub: pd.DataFrame) -> None:
 
 
 def _sanity_check_cross_pool_amplicons(amplicon_sub: pd.DataFrame) -> None:
-    """Sanity check: Cross-pool amplicon (i.e., the two primers of the amplicon are in 
+    """Sanity check: Cross-pool amplicon (i.e., the two primers of the amplicon are in
     different pools)
     """
     logger.info("Sanity check - Checking for cross-pool amplicons:")
@@ -590,7 +589,7 @@ def _sanity_check_cross_pool_amplicons(amplicon_sub: pd.DataFrame) -> None:
 
 
 def _sanity_check_primer_pair_relationships(grouped: pd.DataFrame) -> None:
-    """Sanity check: Ideally, it should be a one-to-one relation between forward and 
+    """Sanity check: Ideally, it should be a one-to-one relation between forward and
     reverse primers.
     """
     logger.info("Sanity check - Checking primer pair relationships:")

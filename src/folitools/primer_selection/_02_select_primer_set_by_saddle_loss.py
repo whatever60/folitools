@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Selects an optimal primer set from a list of candidates to minimize potential
-primer-dimer formation.
+primer-dimer formation. Optionally includes background primers from a FASTA file.
 
 This script implements a Simulated Annealing algorithm to solve a combinatorial
 optimization problem. Given multiple candidate primer pairs for a list of genes,
@@ -9,6 +9,11 @@ it intelligently searches for the combination that results in the lowest
 overall interaction score (SADDLE loss). The efficiency of the algorithm relies
 on extensive pre-computation and a set of purpose-built data structures that allow
 for rapid, incremental updates of the total loss score.
+
+Background primers can be provided via a FASTA file. These sequences are added
+to the overall primer pool for interaction calculations but do not participate
+in the gene-based selection process. They serve as a fixed background against
+which the candidate primers are optimized.
 
 Algorithm Overview:
   1. Pre-computation: All expensive interaction calculations for every individual
@@ -32,10 +37,17 @@ Key Data Structures:
     primer_info_pool:
         - Type: dict[str, list[tuple[str, str, str]]]
         - Stores: The master database of all candidate primer pairs, loaded from
-          the input file.
+          the input file. Background primers are not included here.
         - Structure: {gene_id: [(design_1, fwd_seq_1, rev_seq_1), ...]}
         - Update: Created once at the start by `load_primer_data` and is
           read-only thereafter.
+
+    primers:
+        - Type: list[str]
+        - Stores: Flattened list of all primer sequences including both candidate
+          primers from the TSV and background primers from the FASTA file.
+        - Update: Created by `load_primer_data` and extended with background
+          primers if provided.
 
     current_primer_used:
         - Type: list[int]
@@ -100,6 +112,7 @@ from pathlib import Path
 from functools import lru_cache
 
 import pandas as pd
+from Bio import SeqIO
 
 from .saddle_utils import choice_except
 
@@ -355,6 +368,19 @@ def calc_saddle_self_loss(
     return new_loss
 
 
+def read_fasta(fasta_path: Path) -> dict[str, str]:
+    """
+    Read a FASTA file into a dict of {record_id: sequence}.
+
+    Args:
+        fasta_path: Path to the FASTA file.
+
+    Returns:
+        Dictionary mapping sequence IDs to sequences.
+    """
+    return {r.id: str(r.seq) for r in SeqIO.parse(str(fasta_path), "fasta")}
+
+
 def load_primer_data(
     input_: Path,
 ) -> tuple[dict[str, list[tuple[str, str, str]]], list[str]]:
@@ -404,6 +430,7 @@ def saddle(
     p3_dist_max: int = 2,
     tolerance_factor: float = 1e6,
     reanneal_fraction: float = 0.5,
+    background_fasta: Path | None = None,
 ) -> int:
     """Run simulated annealing to choose a low-dimer primer set.
 
@@ -418,6 +445,8 @@ def saddle(
         p3_dist_max: Max 3' offset considered (default: 2).
         tolerance_factor: SA acceptance scale (default: 1_000_000.0).
         reanneal_fraction: Fraction of cycles for greedy re-anneal (default: 0.5).
+        background_fasta: Optional FASTA file with additional primer sequences to include 
+                         in interaction calculations as fixed background primers.
 
     Returns:
         Exit code 0 on success.
@@ -428,6 +457,12 @@ def saddle(
     print("Start!")
 
     primer_info_pool, primers = load_primer_data(input_)
+    
+    # Add background primers if provided
+    if background_fasta is not None:
+        background_seqs = read_fasta(background_fasta)
+        primers.extend(list(background_seqs.values()))
+    
     genes = list(primer_info_pool.keys())
 
     gene_total_design_list = [list(range(len(primer_info_pool[g]))) for g in genes]

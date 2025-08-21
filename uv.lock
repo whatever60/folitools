@@ -344,6 +344,7 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "polars" },
+    { name = "primer3-py" },
     { name = "pyarrow" },
     { name = "pysam" },
     { name = "scikit-learn" },
@@ -391,6 +392,7 @@ requires-dist = [
     { name = "openpyxl" },
     { name = "pandas", specifier = ">=2.3.0" },
     { name = "polars", specifier = ">=1.31.0" },
+    { name = "primer3-py", specifier = ">=2.2.0" },
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pysam", specifier = ">=0.23.3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.4.1" },
@@ -993,6 +995,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/7e/2baa2858556e970cc6a35c0d8ad34b2f9d982f1766c0a1fec20ca529a947/polars-1.32.0-cp39-abi3-manylinux_2_24_aarch64.whl", hash = "sha256:13af55890734f89b76016a395fb2e7460e7d9feecf50ed2f55cf0f05a1c0c991", size = 35183912, upload-time = "2025-08-01T01:42:30.446Z" },
     { url = "https://files.pythonhosted.org/packages/ef/41/0e6821dccc5871186a9b95af3990404aa283318263918d33ac974b35cb37/polars-1.32.0-cp39-abi3-win_amd64.whl", hash = "sha256:0397fc2501a5d5f1bb3fe8d27e0c26c7a5349b4110157c0fb7833cd3f5921c9e", size = 37747905, upload-time = "2025-08-01T01:42:33.975Z" },
     { url = "https://files.pythonhosted.org/packages/c2/93/d06df0817da93f922a67e27e9e0f407856991374daa62687e2a45a18935c/polars-1.32.0-cp39-abi3-win_arm64.whl", hash = "sha256:dd84e24422509e1ec9be46f67f758d0bd9944d1ae4eacecee4f53adaa8ecd822", size = 33978543, upload-time = "2025-08-01T01:42:36.779Z" },
+]
+
+[[package]]
+name = "primer3-py"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/c3/0217aaf3a5058d495c4feba487ff9e6fd18e7f49c0c40ffc6211d4e5f71f/primer3_py-2.2.0.tar.gz", hash = "sha256:c71f8cccdf1e3f7f769f85c2551adff7488a1bd8f722e373b702ed25b4c1fa90", size = 694497, upload-time = "2025-05-20T00:02:04.58Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7e/34/45a3a4deb5a667b1fad905a3ec1ed896ae86767d6e5c05781bba71a07996/primer3_py-2.2.0-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:e9a0b1d51683c9cb03b59b3c905569935ce8d820a6d04fec64a7bb90cad203cb", size = 1353065, upload-time = "2025-05-20T00:01:44.622Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/c1/c0611bd155d15a76bffde4c0df64fd7585c44d82a89e4c7ce8088d94bcdd/primer3_py-2.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:52cbc454d0551d7040820373cdf3b7471cdad4a3eccf84ee4e5d04635a72ab5f", size = 3091181, upload-time = "2025-05-20T00:01:46.339Z" },
+    { url = "https://files.pythonhosted.org/packages/86/b1/f4c66d2f16cbd71c7e138927cb26d3fd2030f397379d42cf3cb4fa01ca47/primer3_py-2.2.0-cp312-cp312-win_amd64.whl", hash = "sha256:9464dd0253d2be7bd3955191615d0975f463d64ba0c32793873cf378642ee311", size = 1585900, upload-time = "2025-05-20T00:01:48.101Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/8e/4a7610c349e388d668b32632b3466acad410b00e6b1cb9511733e02db906/primer3_py-2.2.0-cp313-cp313-macosx_10_14_x86_64.whl", hash = "sha256:75fa4af6127ce33b48221a7376aeb0e4460b3ac20d275e3b44d245b07d7134e3", size = 1351531, upload-time = "2025-05-20T00:01:49.862Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/5c/806aeedefab7e0491571dc80b10e2f1fbd8e1d93e60ab2bcab11da2af0bf/primer3_py-2.2.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a8868054236f301ed46d1f420ca5de650f0c3ddd1ed49dc92681b1eb85a46137", size = 3079722, upload-time = "2025-05-20T00:01:51.521Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/44/50494b412c33d4c4dc8ac48dbc405dc6bea4abda0de785d54eca70a69fe9/primer3_py-2.2.0-cp313-cp313-win_amd64.whl", hash = "sha256:7fd1d10e38f01c2ce61da5460807cb9fde53ce3c4c65d6aed10e34e88d178dc6", size = 1585025, upload-time = "2025-05-20T00:01:53.016Z" },
 ]
 
 [[package]]

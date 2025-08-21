@@ -27,7 +27,8 @@ folitools-primer saddle \
   --output-final ./out/output_selected.tsv \
   --output-loss ./out/output_select.loss.txt \
   --num-cycles-anneal 50 \
-  --random-seed 42
+  --random-seed 42 \
+  --background-fasta ./background_primers.fasta
 
 folitools-primer product \
   --input-selected ./out/output_selected.tsv \
@@ -41,7 +42,8 @@ folitools-primer workflow \
   --amplicon-size-range 320 380 \
   --num-cycles-anneal 50 \
   --random-seed 42 \
-  --output-dir ./out
+  --output-dir ./out \
+  --background-fasta ./background_primers.fasta
 """
 
 from pathlib import Path
@@ -96,6 +98,7 @@ def saddle(
     output_loss: Path,
     num_cycles_anneal: int = 50,
     random_seed: int = 42,
+    background_fasta: Path | None = None,
 ) -> int:
     """Run SADDLE to choose a low-interaction primer set.
 
@@ -105,6 +108,7 @@ def saddle(
         output_loss: TSV path to write loss trajectory (no header).
         num_cycles_anneal: Annealing iterations.
         random_seed: RNG seed for reproducibility.
+        background_fasta: Optional FASTA file with additional primers to include in the pool.
 
     Returns:
         Process exit code.
@@ -115,6 +119,7 @@ def saddle(
         output_loss=output_loss,
         num_cycles_anneal=num_cycles_anneal,
         random_seed=random_seed,
+        background_fasta=background_fasta,
     )
 
 
@@ -183,6 +188,7 @@ def workflow(
     output_dir: Path,
     num_cycles_anneal: int = 50,
     random_seed: int = 42,
+    background_fasta: Path | None = None,
 ) -> int:
     """Run the full pipeline: subset → saddle → product.
 
@@ -193,6 +199,7 @@ def workflow(
         output_dir: Directory to write all outputs.
         num_cycles_anneal: SADDLE iterations (default: 50).
         random_seed: RNG seed (default: 42).
+        background_fasta: Optional FASTA file with additional primers to include in the pool.
 
     Returns:
         Process exit code.
@@ -222,6 +229,7 @@ def workflow(
         output_loss=loss_tsv,
         num_cycles_anneal=num_cycles_anneal,
         random_seed=random_seed,
+        background_fasta=background_fasta,
     )
     if rc2 != 0:
         return rc2

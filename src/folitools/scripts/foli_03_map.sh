@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$script_dir/utils.sh"
+
+# Help function
+show_help() {
+    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete] [strand]"
+    echo "  input_files    : Space-separated list of R1 FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) or BAM/SAM file paths"
+    echo "  output_bam_dir : Output directory for BAM files"
+    echo "  output_star_dir: Output directory for STAR files (required if any FASTQ inputs)"
+    echo "  star_index     : Path to the STAR genome index directory (required if any FASTQ inputs)"
+    echo "  gtf_file       : Path to the GTF annotation file"
+    echo "  threads        : Number of threads (default: 1)"
+    echo "  skip           : Number of samples to skip (default: 0)"
+    echo "  delete         : Delete input files after processing (default: false)"
+    echo "  strand         : Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded) (default: 0)"
+    echo "  -h, --help     : Show this help message"
+    exit 0
+}
+
+# Check for help option
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+fi
+
 # Parse positional arguments
 INPUT_FILES="${1:-}"
 OUTPUT_BAM="${2:-}"
@@ -13,17 +37,7 @@ DELETE="${8:-false}"
 STRAND="${9:-0}"
 
 if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$GTF_PATH" ]]; then
-    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete] [strand]"
-    echo "  input_files    : Space-separated list of R1 FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) or BAM/SAM file paths"
-    echo "  output_bam_dir : Output directory for BAM files"
-    echo "  output_star_dir: Output directory for STAR files (required if any FASTQ inputs)"
-    echo "  star_index     : Path to the STAR genome index directory (required if any FASTQ inputs)"
-    echo "  gtf_file       : Path to the GTF annotation file"
-    echo "  threads        : Number of threads (default: 1)"
-    echo "  skip           : Number of samples to skip (default: 0)"
-    echo "  delete         : Delete input files after processing (default: false)"
-    echo "  strand         : Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded) (default: 0)"
-    exit 1
+    show_help
 fi
 
 # Validate strand parameter
@@ -35,19 +49,19 @@ fi
 # Convert space-separated string back to array to analyze input files
 read -ra input_files <<< "$INPUT_FILES"
 
+# Validate file formats
+validate_file_formats "$INPUT_FILES" "both"
+
 # Analyze input files to determine what we need
 PRELOAD=false
 HAS_FASTQ=false
 HAS_BAM=false
 
 for file in "${input_files[@]}"; do
-    if [[ "$file" == *.fq.gz || "$file" == *.fastq.gz || "$file" == *.fq || "$file" == *.fastq ]]; then
+    if is_fastq_file "$file"; then
         HAS_FASTQ=true
-    elif [[ "$file" == *.bam || "$file" == *.sam ]]; then
+    elif is_alignment_file "$file"; then
         HAS_BAM=true
-    else
-        echo "ERROR: Unsupported file format: $file. Only .fq.gz, .fastq.gz, .fq, .fastq, .bam, and .sam files are supported."
-        exit 1
     fi
 done
 
@@ -133,13 +147,9 @@ for input_file in "${input_files[@]}"; do
     fi
 
     # Determine file type and extract sample name
-    if [[ "$input_file" == *.bam || "$input_file" == *.sam ]]; then
-        # BAM/SAM file processing - extract sample name similar to foli_04_count.sh
-        if [[ "$input_file" == *.bam ]]; then
-            sample_name="$(basename "$input_file" .bam | cut -d. -f1)"
-        else
-            sample_name="$(basename "$input_file" .sam | cut -d. -f1)"
-        fi
+    if is_alignment_file "$input_file"; then
+        # BAM/SAM file processing
+        sample_name="$(extract_sample_name "$input_file")"
         echo "Processing BAM/SAM sample: $sample_name"
         
         # For BAM/SAM files, we skip STAR alignment and go directly to featureCounts
@@ -148,19 +158,8 @@ for input_file in "${input_files[@]}"; do
     else
         # FASTQ file processing
         fqR1="$input_file"
-        fqR2="${fqR1/_1/_2}"
-        
-        # Handle different FASTQ extensions for sample name extraction
-        if [[ "$fqR1" == *.fq.gz ]]; then
-            baseR1=$(basename "$fqR1" .fq.gz)
-        elif [[ "$fqR1" == *.fastq.gz ]]; then
-            baseR1=$(basename "$fqR1" .fastq.gz)
-        elif [[ "$fqR1" == *.fq ]]; then
-            baseR1=$(basename "$fqR1" .fq)
-        elif [[ "$fqR1" == *.fastq ]]; then
-            baseR1=$(basename "$fqR1" .fastq)
-        fi
-        sample_name="${baseR1%%_*}"
+        fqR2="$(derive_r2_from_r1 "$fqR1")"
+        sample_name="$(extract_sample_name "$fqR1")"
 
         # Skip if no matching R2
         if [[ ! -f "$fqR2" ]]; then
@@ -345,14 +344,14 @@ for input_file in "${input_files[@]}"; do
         mv "$TEMP_FC_TXT.summary" "$FINAL_FC_TXT.summary"
         
         # Clean up intermediate BAM file for FASTQ inputs (not for BAM/SAM inputs as that's the original)
-        if [[ "$input_file" != *.bam && "$input_file" != *.sam ]]; then
+        if is_fastq_file "$input_file"; then
             rm "$star_bam"
         fi
     fi
     
     # Remove input files to save space
     if [[ "$DELETE" == "True" ]]; then
-        if [[ "$input_file" == *.bam || "$input_file" == *.sam ]]; then
+        if is_alignment_file "$input_file"; then
             # For BAM/SAM inputs, only delete if the input file is different from the final output
             if [[ "$(realpath "$input_file")" != "$(realpath "$final_bam")" ]]; then
                 rm "$input_file"

@@ -2,6 +2,25 @@
 
 set -euo pipefail
 
+script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$script_dir/utils.sh"
+
+# Help function
+show_help() {
+    echo "Usage: foli_04_count.sh <input_files> [output_dir] [threads] [skip]"
+    echo "  input_files : Space-separated list of alignment file paths (.bam/.sam)"
+    echo "  output_dir  : Output directory for count results (default: ./counts)"
+    echo "  threads     : Number of threads to use (default: 16)"
+    echo "  skip        : Skip certain steps (default: 0)"
+    echo "  -h, --help  : Show this help message"
+    exit 0
+}
+
+# Check for help option
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+fi
+
 INPUT_FILES="${1}"  # Space-separated list of actual file paths
 OUTPUT_DIR="${2:-./counts}"  # Output directory for count results
 THREADS="${3:-16}"
@@ -17,6 +36,9 @@ mkdir -p "$COUNTS_DIR"
 # Convert space-separated string back to array
 read -ra bams <<< "$INPUT_FILES"
 
+# Validate that all files are alignment format
+validate_file_formats "$INPUT_FILES" "alignment"
+
 i=0
 for bam in "${bams[@]}"; do
     ((++i))
@@ -24,8 +46,8 @@ for bam in "${bams[@]}"; do
         echo "Skipping sample $i: $bam"
         continue
     fi
-    # split by dot to get the sample name
-    sample_name="$(basename "$bam" .bam | cut -d. -f1)"
+    # Extract sample name using utility function
+    sample_name="$(extract_sample_name "$bam")"
     echo "Processing sample: $sample_name"
 
     # umi_tools behaviors:

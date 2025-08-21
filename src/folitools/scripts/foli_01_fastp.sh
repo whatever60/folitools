@@ -2,8 +2,25 @@
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "$script_dir/utils.sh"
+
+# Help function
+show_help() {
+    echo "Usage: foli_01_fastp.sh <input_files> [output_dir] [threads] [skip] [delete]"
+    echo "  input_files : Space-separated list of R1 FASTQ file paths (.fq/.fastq/.fq.gz/.fastq.gz)"
+    echo "  output_dir  : Output directory for trimmed files (default: ./fastp)"
+    echo "  threads     : Number of threads to use (default: 16)"
+    echo "  skip        : Skip certain steps (default: 0)"
+    echo "  delete      : Delete intermediate files (default: false)"
+    echo "  -h, --help  : Show this help message"
+    exit 0
+}
+
+# Check for help option
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+fi
 
 INPUT_FILES="${1}"  # Space-separated list of actual file paths
 OUTPUT_DIR="${2:-./fastp}"  # Output directory for trimmed files
@@ -23,6 +40,9 @@ mkdir -p "$FASTQ_FASTQC_DIR"
 # Convert space-separated string back to array
 read -ra fqr1s <<< "$INPUT_FILES"
 
+# Validate that all files are FASTQ format
+validate_file_formats "$INPUT_FILES" "fastq"
+
 ############################################
 # Main loop over paired-end FASTQs
 ############################################
@@ -34,10 +54,9 @@ for fqR1 in "${fqr1s[@]}"; do
         continue
     fi
     
-    # Derive the matching R2
-    fqR2="${fqR1/_R1_/_R2_}"
-    baseR1=$(basename "$fqR1" .fastq.gz)
-    sample_name="${baseR1%%_*}"
+    # Derive the matching R2 using utility function
+    fqR2="$(derive_r2_from_r1 "$fqR1")"
+    sample_name="$(extract_sample_name "$fqR1")"
     trimmed_R1="$FASTP_DIR/${sample_name}_1.fq.gz"
     trimmed_R2="$FASTP_DIR/${sample_name}_2.fq.gz"
 

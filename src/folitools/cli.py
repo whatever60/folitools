@@ -107,20 +107,23 @@ def map_(
         list[str],
         Parameter(
             consume_multiple=True,
-            help="File path, glob pattern, or list of file paths for R1 FASTQ files.",
+            help="File path, glob pattern, or list of file paths for R1 FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) or BAM/SAM files.",
         ),
     ],
     output_bam: Annotated[str, Parameter(help="Output directory for BAM files")],
     output_star: Annotated[
-        str, Parameter(help="Output directory for STAR alignment files")
-    ],
+        str | None,
+        Parameter(
+            help="Output directory for STAR alignment files (required if any FASTQ inputs)"
+        ),
+    ] = None,
     star_index: Annotated[
-        Path,
+        Path | None,
         Parameter(
             "--star-index",
-            help="Path to the STAR genome index directory.",
+            help="Path to the STAR genome index directory (required if any FASTQ inputs).",
         ),
-    ],
+    ] = None,
     gtf: Annotated[
         Path,
         Parameter(
@@ -147,7 +150,7 @@ def map_(
         bool, Parameter(help="Delete input files after processing")
     ] = False,
 ):
-    """Run the mapping step of the pipeline. Includes read filtering to remove short reads (primer dimers)."""
+    """Run the mapping step of the pipeline. Supports both FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) and BAM/SAM inputs. For FASTQ files, includes read filtering to remove short reads (primer dimers) and STAR alignment. For BAM/SAM files, skips alignment and goes directly to featureCounts."""
     # Expand patterns to actual file paths
     file_paths = expand_path_to_list(input_)
     # Convert list to space-separated string for shell script
@@ -157,8 +160,8 @@ def map_(
         (
             input_patterns,
             output_bam,
-            output_star,
-            str(star_index),
+            output_star or "",
+            str(star_index) if star_index else "",
             str(gtf),
             str(cores),
             str(skip),

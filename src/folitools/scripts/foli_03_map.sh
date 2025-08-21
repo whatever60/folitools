@@ -12,12 +12,12 @@ SKIP="${7:-0}"
 DELETE="${8:-false}"
 STRAND="${9:-0}"
 
-if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$OUTPUT_STAR" || -z "$STAR_INDEX" || -z "$GTF_PATH" ]]; then
+if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$GTF_PATH" ]]; then
     echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete] [strand]"
-    echo "  input_files    : Space-separated list of R1 FASTQ file paths"
+    echo "  input_files    : Space-separated list of R1 FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) or BAM/SAM file paths"
     echo "  output_bam_dir : Output directory for BAM files"
-    echo "  output_star_dir: Output directory for STAR files"
-    echo "  star_index     : Path to the STAR genome index directory"
+    echo "  output_star_dir: Output directory for STAR files (required if any FASTQ inputs)"
+    echo "  star_index     : Path to the STAR genome index directory (required if any FASTQ inputs)"
     echo "  gtf_file       : Path to the GTF annotation file"
     echo "  threads        : Number of threads (default: 1)"
     echo "  skip           : Number of samples to skip (default: 0)"
@@ -31,6 +31,39 @@ if [[ ! "$STRAND" =~ ^[0-2]$ ]]; then
     echo "ERROR: strand parameter must be 0, 1, or 2"
     exit 1
 fi
+
+# Convert space-separated string back to array to analyze input files
+read -ra input_files <<< "$INPUT_FILES"
+
+# Analyze input files to determine what we need
+PRELOAD=false
+HAS_FASTQ=false
+HAS_BAM=false
+
+for file in "${input_files[@]}"; do
+    if [[ "$file" == *.fq.gz || "$file" == *.fastq.gz || "$file" == *.fq || "$file" == *.fastq ]]; then
+        HAS_FASTQ=true
+    elif [[ "$file" == *.bam || "$file" == *.sam ]]; then
+        HAS_BAM=true
+    else
+        echo "ERROR: Unsupported file format: $file. Only .fq.gz, .fastq.gz, .fq, .fastq, .bam, and .sam files are supported."
+        exit 1
+    fi
+done
+
+# Determine if we need to preload STAR
+if [[ "$HAS_FASTQ" == true ]]; then
+    PRELOAD=true
+    if [[ -z "$OUTPUT_STAR" || -z "$STAR_INDEX" ]]; then
+        echo "ERROR: output_star_dir and star_index are required when processing FASTQ files"
+        exit 1
+    fi
+fi
+
+echo "Input analysis:"
+echo "  FASTQ files detected: $HAS_FASTQ"
+echo "  BAM files detected: $HAS_BAM"
+echo "  Will preload STAR index: $PRELOAD"
 
 # STAR_INDEX="$HOME/data/gencode/Gencode_human/release_46/STAR_2.7.11b_150"
 # STAR_INDEX="$HOME/data/gencode/Gencode_mouse/release_M32/STAR_2.7.10b_150"
@@ -62,137 +95,163 @@ EOF
 }
 
 # --- Directory Setup ---
-STAR_DIR="$OUTPUT_STAR"
 FEATURECOUNTS_DIR="$OUTPUT_BAM"
-
 echo "Creating output directories..."
-mkdir -p "$STAR_DIR" "$FEATURECOUNTS_DIR"
+mkdir -p "$FEATURECOUNTS_DIR"
 
-# --- Pre-load STAR Genome Index ---
-echo "Loading STAR genome into memory..."
-# Remove first?
-STAR \
-    --runThreadN 1 \
-    --genomeDir "${STAR_INDEX-}" \
-    --genomeLoad Remove \
-    --outFileNamePrefix _temp/ \
-    &>/dev/null || :
-rm -rf _temp 2>/dev/null || :
-STAR \
-    --runThreadN 1 \
-    --genomeDir "$STAR_INDEX" \
-    --genomeLoad LoadAndExit \
-    --outFileNamePrefix _temp/ \
-    > /dev/null
-rm -rf _temp
+if [[ "$PRELOAD" == true ]]; then
+    STAR_DIR="$OUTPUT_STAR"
+    mkdir -p "$STAR_DIR"
+    
+    # --- Pre-load STAR Genome Index ---
+    echo "Loading STAR genome into memory..."
+    # Remove first?
+    STAR \
+        --runThreadN 1 \
+        --genomeDir "${STAR_INDEX-}" \
+        --genomeLoad Remove \
+        --outFileNamePrefix _temp/ \
+        &>/dev/null || :
+    rm -rf _temp 2>/dev/null || :
+    STAR \
+        --runThreadN 1 \
+        --genomeDir "$STAR_INDEX" \
+        --genomeLoad LoadAndExit \
+        --outFileNamePrefix _temp/ \
+        > /dev/null
+    rm -rf _temp
+fi
 
 # Convert space-separated string back to array
-read -ra fqr1s <<< "$INPUT_FILES"
+read -ra input_files <<< "$INPUT_FILES"
 i=0
-for fqR1 in "${fqr1s[@]}"; do
+for input_file in "${input_files[@]}"; do
     ((++i))
     if [[ $i -le $SKIP ]]; then
-        echo "Skipping sample $i: $fqR1"
+        echo "Skipping sample $i: $input_file"
         continue
     fi
 
-    # Derive the matching R2
-    fqR2="${fqR1/_1/_2}"
-    baseR1=$(basename "$fqR1" .fq.gz)
-    sample_name="${baseR1%%_*}"
+    # Determine file type and extract sample name
+    if [[ "$input_file" == *.bam || "$input_file" == *.sam ]]; then
+        # BAM/SAM file processing - extract sample name similar to foli_04_count.sh
+        if [[ "$input_file" == *.bam ]]; then
+            sample_name="$(basename "$input_file" .bam | cut -d. -f1)"
+        else
+            sample_name="$(basename "$input_file" .sam | cut -d. -f1)"
+        fi
+        echo "Processing BAM/SAM sample: $sample_name"
+        
+        # For BAM/SAM files, we skip STAR alignment and go directly to featureCounts
+        star_bam="$input_file"
+        
+    else
+        # FASTQ file processing
+        fqR1="$input_file"
+        fqR2="${fqR1/_1/_2}"
+        
+        # Handle different FASTQ extensions for sample name extraction
+        if [[ "$fqR1" == *.fq.gz ]]; then
+            baseR1=$(basename "$fqR1" .fq.gz)
+        elif [[ "$fqR1" == *.fastq.gz ]]; then
+            baseR1=$(basename "$fqR1" .fastq.gz)
+        elif [[ "$fqR1" == *.fq ]]; then
+            baseR1=$(basename "$fqR1" .fq)
+        elif [[ "$fqR1" == *.fastq ]]; then
+            baseR1=$(basename "$fqR1" .fastq)
+        fi
+        sample_name="${baseR1%%_*}"
 
-    # Skip if no matching R2
-    if [[ ! -f "$fqR2" ]]; then
-        echo "WARNING: Could not find R2 for: $fqR1"
-        continue
-    fi
-    echo "Processing sample: $sample_name"
+        # Skip if no matching R2
+        if [[ ! -f "$fqR2" ]]; then
+            echo "WARNING: Could not find R2 for: $fqR1"
+            continue
+        fi
+        echo "Processing FASTQ sample: $sample_name"
 
-    # Lessons learned during crafting the code below:
-    # The big command below basically drops short reads using cutadapt and directly pipes its 
-    # output to STAR, without saving any intermediate files.
-    # FIFO files are used for communication between processes. To make it work, I had to
-    # 1. Explicitly say `exec 3<>"$FIFO_R1"` and `exec 4<>"$FIFO_R2"` after creating the FIFOs. This is 
-    #  to ensure that the FIFOs are opened for both reading and writing and to prevent blocking. As a
-    #  result, we also need to explicitly close the FIFOs after the cutadapt command (normally the FIFO 
-    #  will close when it sees EOF), so that STAR knows that the input is complete. Suprisingly, the way 
-    #  to do this is to echo a newline to the FIFOs instead of the moore common `exec 3>&- 4>&-`.
-    #  I really don't know why.
-    # 2. Run the consumer processes (STAR) first in the background (&) and then the producer (cutadapt).
-    #   Otherwise, blocking still occurs, though I don't understand why.
-    # 3. Record the PID of the STAR process and wait for it to finish before removing the FIFOs and running
-    #   next steps. Otherwise the output of STAR might be incomplete.
-    # 4. Somehow cutadapt does not work well with FIFO files. That is, if I set -o and -p to FIFOs, it
-    #  will just block. Instead, I let cutadapt output interleaved FASTQ to stdout and used another awk
-    #  command to split it back into two FIFOs.
-    # 5. FIFO file names must be explicit since STAR reads data based on file name extension. We not only
-    #  need the FIFOs to be text (not gzipped), but also need to set --readFilesCommand to cat. Just
-    #  setting --readFilesCommand to cat still results in error when the FIFOs are named with .gz.
+        # Lessons learned during crafting the code below:
+        # The big command below basically drops short reads using cutadapt and directly pipes its 
+        # output to STAR, without saving any intermediate files.
+        # FIFO files are used for communication between processes. To make it work, I had to
+        # 1. Explicitly say `exec 3<>"$FIFO_R1"` and `exec 4<>"$FIFO_R2"` after creating the FIFOs. This is 
+        #  to ensure that the FIFOs are opened for both reading and writing and to prevent blocking. As a
+        #  result, we also need to explicitly close the FIFOs after the cutadapt command (normally the FIFO 
+        #  will close when it sees EOF), so that STAR knows that the input is complete. Suprisingly, the way 
+        #  to do this is to echo a newline to the FIFOs instead of the moore common `exec 3>&- 4>&-`.
+        #  I really don't know why.
+        # 2. Run the consumer processes (STAR) first in the background (&) and then the producer (cutadapt).
+        #   Otherwise, blocking still occurs, though I don't understand why.
+        # 3. Record the PID of the STAR process and wait for it to finish before removing the FIFOs and running
+        #   next steps. Otherwise the output of STAR might be incomplete.
+        # 4. Somehow cutadapt does not work well with FIFO files. That is, if I set -o and -p to FIFOs, it
+        #  will just block. Instead, I let cutadapt output interleaved FASTQ to stdout and used another awk
+        #  command to split it back into two FIFOs.
+        # 5. FIFO file names must be explicit since STAR reads data based on file name extension. We not only
+        #  need the FIFOs to be text (not gzipped), but also need to set --readFilesCommand to cat. Just
+        #  setting --readFilesCommand to cat still results in error when the FIFOs are named with .gz.
 
-    # Why don't I just bypass cutadapt and use awk directly to two FIFOs lol? cutadapt 
-    # seems to be the source of the many surprises here.
+        # Why don't I just bypass cutadapt and use awk directly to two FIFOs lol? cutadapt 
+        # seems to be the source of the many surprises here.
 
-    FIFO_R1="$FEATURECOUNTS_DIR/${sample_name}_1.fifo.fq"
-    FIFO_R2="$FEATURECOUNTS_DIR/${sample_name}_2.fifo.fq"
-    # Delete if they already exist
-    rm -f "$FIFO_R1" "$FIFO_R2"
-    mkfifo "$FIFO_R1" "$FIFO_R2"
-    exec 3<>"$FIFO_R1"    # O_RDWR on FIFO_R1
-    exec 4<>"$FIFO_R2"    # O_RDWR on FIFO_R2
-    # Remove reads that are too short (these are considered primer dimers)
-    # About STAR arguments:
-    # --outSAMtype BAM or other BAM types are only compatible with --outSAMorder Paired.
-    #   So we will leave it as this default.
-    # Note that we are sorting afterwards with sambamba. So no need to sort in STAR or featureCounts.
-    STAR \
-        --runThreadN "$((THREADS - 2))" \
-        --genomeDir "$STAR_INDEX" \
-        --genomeLoad LoadAndKeep \
-        --readFilesIn "$FIFO_R1" "$FIFO_R2" \
-        --readFilesCommand cat \
-        --outFileNamePrefix "$STAR_DIR/${sample_name}/" \
-        --outFilterMultimapNmax 1000 \
-        --outSAMmultNmax 1000 \
-        --outSAMunmapped Within \
-        --chimOutType WithinBAM \
-        --outSAMmode Full \
-        --outSAMtype BAM Unsorted \
-        --outSAMorder Paired \
-        --outBAMcompression 1 \
-        --outTmpKeep None \
-        --quantMode GeneCounts \
-        > /dev/null &
-        #  | \
-    #     python -m folitools.add_tags \
-    #         --cell_tag ${sample_name} \
-    #         --output "$FEATURECOUNTS_DIR/${sample_name}.temp.bam" &
-    star_pid=$!
-    cutadapt \
-        -j 1 \
-        --interleaved \
-        --minimum-length 60:60 \
-        "$fqR1" "$fqR2" \
-        2> /dev/null \
-        | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
-            '
-                {
-                    if (((NR - 1) % 8) < 4) {
-                        print $0 > p1
-                    } else {
-                        print $0 > p2
+        FIFO_R1="$FEATURECOUNTS_DIR/${sample_name}_1.fifo.fq"
+        FIFO_R2="$FEATURECOUNTS_DIR/${sample_name}_2.fifo.fq"
+        # Delete if they already exist
+        rm -f "$FIFO_R1" "$FIFO_R2"
+        mkfifo "$FIFO_R1" "$FIFO_R2"
+        exec 3<>"$FIFO_R1"    # O_RDWR on FIFO_R1
+        exec 4<>"$FIFO_R2"    # O_RDWR on FIFO_R2
+        # Remove reads that are too short (these are considered primer dimers)
+        # About STAR arguments:
+        # --outSAMtype BAM or other BAM types are only compatible with --outSAMorder Paired.
+        #   So we will leave it as this default.
+        # Note that we are sorting afterwards with sambamba. So no need to sort in STAR or featureCounts.
+        STAR \
+            --runThreadN "$((THREADS - 2))" \
+            --genomeDir "$STAR_INDEX" \
+            --genomeLoad LoadAndKeep \
+            --readFilesIn "$FIFO_R1" "$FIFO_R2" \
+            --readFilesCommand cat \
+            --outFileNamePrefix "$STAR_DIR/${sample_name}/" \
+            --outFilterMultimapNmax 1000 \
+            --outSAMmultNmax 1000 \
+            --outSAMunmapped Within \
+            --chimOutType WithinBAM \
+            --outSAMmode Full \
+            --outSAMtype BAM Unsorted \
+            --outSAMorder Paired \
+            --outBAMcompression 1 \
+            --outTmpKeep None \
+            --quantMode GeneCounts \
+            > /dev/null &
+        star_pid=$!
+        cutadapt \
+            -j 1 \
+            --interleaved \
+            --minimum-length 60:60 \
+            "$fqR1" "$fqR2" \
+            2> /dev/null \
+            | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
+                '
+                    {
+                        if (((NR - 1) % 8) < 4) {
+                            print $0 > p1
+                        } else {
+                            print $0 > p2
+                        }
                     }
-                }
-            '
-    # Write EOF to the FIFOs to signal completion
-    echo -e "\n" >&3
-    echo -e "\n" >&4
-    # exec 3>&- 4>&-  # Close the FIFOs
-    wait "$star_pid"
-    rm -f "$FIFO_R1" "$FIFO_R2"
-    star_bam_raw="$STAR_DIR/${sample_name}/Aligned.out.bam"
-    star_bam="$STAR_DIR/${sample_name}/${sample_name}.bam"
-    mv "$star_bam_raw" "$star_bam"
+                '
+        # Write EOF to the FIFOs to signal completion
+        echo -e "\n" >&3
+        echo -e "\n" >&4
+        # exec 3>&- 4>&-  # Close the FIFOs
+        wait "$star_pid"
+        rm -f "$FIFO_R1" "$FIFO_R2"
+        star_bam_raw="$STAR_DIR/${sample_name}/Aligned.out.bam"
+        star_bam="$STAR_DIR/${sample_name}/${sample_name}.bam"
+        mv "$star_bam_raw" "$star_bam"
+    fi
 
+    # Common processing for both FASTQ and BAM inputs: featureCounts
     # About featureCounts arguments:
     # -T: Number of threads
     # -p: sequencing data is paired-end
@@ -216,16 +275,17 @@ for fqR1 in "${fqr1s[@]}"; do
 
     # featurecounts cannot handle empty input. so check if the bam from star is empty. 
     # If so, just copy it and touch other output files
-    first_bam_line=$(samtools view $star_bam | head -n1) || true
+    first_bam_line=$(samtools view "$star_bam" | head -n1) || true
+    final_bam="$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
     if ! echo "$first_bam_line" | grep -q .; then
-        cp $star_bam "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
-        samtools index "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
+        cp "$star_bam" "$final_bam"
+        samtools index "$final_bam"
         echo "Empty bam, featurecounts not run" > "$FEATURECOUNTS_DIR/${sample_name}.log"
         # Mock featurecounts output
         echo "# Program:featureCounts v2.0.3; Command:mock" > "$FEATURECOUNTS_DIR/${sample_name}.txt"
         echo "Geneid\tChr\tStart\tEnd\tStrand\tLength\t$star_bam" >> "$FEATURECOUNTS_DIR/${sample_name}.txt"
         # Mock featurecounts summary
-        create_mock_summary $star_bam "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
+        create_mock_summary "$star_bam" "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
     else
         FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
         if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
@@ -242,7 +302,6 @@ for fqR1 in "${fqr1s[@]}"; do
         TEMP_FC_TXT="$FEATURECOUNTS_DIR/_${sample_name}.txt"
         TEMP_BAM="$FEATURECOUNTS_DIR/_${sample_name}.sorted.bam"
         FINAL_FC_TXT="$FEATURECOUNTS_DIR/${sample_name}.txt"
-        FINAL_BAM="$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
         
         featureCounts \
             -T "$((FC_THREADS - 1))" \
@@ -255,7 +314,7 @@ for fqR1 in "${fqr1s[@]}"; do
             --donotsort \
             -R BAM \
             --Rpath "$FEATURECOUNTS_DIR/" \
-            $star_bam \
+            "$star_bam" \
             2> "$FEATURECOUNTS_DIR/$sample_name.log" \
         & \
         python -m folitools.add_tags \
@@ -271,7 +330,7 @@ for fqR1 in "${fqr1s[@]}"; do
         & \
         wait
         
-        rm -f $FIFO
+        rm -f "$FIFO"
 
         # Check if the temporary BAM file was created successfully
         if [[ ! -f "$TEMP_BAM" ]]; then
@@ -280,17 +339,27 @@ for fqR1 in "${fqr1s[@]}"; do
         fi
         
         # Move temporary files to final location (allows overwriting)
-        mv "$TEMP_BAM" "$FINAL_BAM"
-        mv "$TEMP_BAM.bai" "$FINAL_BAM.bai"
+        mv "$TEMP_BAM" "$final_bam"
+        mv "$TEMP_BAM.bai" "$final_bam.bai"
         mv "$TEMP_FC_TXT" "$FINAL_FC_TXT"
         mv "$TEMP_FC_TXT.summary" "$FINAL_FC_TXT.summary"
-        rm $star_bam
+        
+        # Clean up intermediate BAM file for FASTQ inputs (not for BAM/SAM inputs as that's the original)
+        if [[ "$input_file" != *.bam && "$input_file" != *.sam ]]; then
+            rm "$star_bam"
+        fi
     fi
     
-
-    # Remove input FASTQs to save space
+    # Remove input files to save space
     if [[ "$DELETE" == "True" ]]; then
-        rm "$fqR1" "$fqR2"
+        if [[ "$input_file" == *.bam || "$input_file" == *.sam ]]; then
+            # For BAM/SAM inputs, only delete if the input file is different from the final output
+            if [[ "$(realpath "$input_file")" != "$(realpath "$final_bam")" ]]; then
+                rm "$input_file"
+            fi
+        else
+            rm "$fqR1" "$fqR2"
+        fi
     fi
 
     # - STAR can read from stdin with FIFO, and can output BAM to stdout.
@@ -300,16 +369,18 @@ for fqR1 in "${fqr1s[@]}"; do
     #    output BAM to stdout for sorting.
     # - umi_tools group does not require sorted BAM, so I do not sort bam here and 
     #    directly give unsorted BAM to umi_tools group in the next step.
-done | tqdm --total ${#fqr1s[@]} > /dev/null
+done | tqdm --total ${#input_files[@]} > /dev/null
 
-# Unload the STAR genome index to free up memory
-echo "Unloading STAR genome from memory."
-STAR \
-    --runThreadN 1 \
-    --genomeDir "$STAR_INDEX" \
-    --genomeLoad Remove \
-    --outFileNamePrefix _temp/ \
-    > /dev/null
-rm -rf _temp
+# Unload the STAR genome index to free up memory (only if we loaded it)
+if [[ "$PRELOAD" == true ]]; then
+    echo "Unloading STAR genome from memory."
+    STAR \
+        --runThreadN 1 \
+        --genomeDir "$STAR_INDEX" \
+        --genomeLoad Remove \
+        --outFileNamePrefix _temp/ \
+        > /dev/null
+    rm -rf _temp
+fi
 
 echo "Pipeline finished successfully."

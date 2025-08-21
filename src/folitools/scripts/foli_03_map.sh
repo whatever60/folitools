@@ -189,6 +189,9 @@ for fqR1 in "${fqr1s[@]}"; do
     # exec 3>&- 4>&-  # Close the FIFOs
     wait "$star_pid"
     rm -f "$FIFO_R1" "$FIFO_R2"
+    star_bam_raw="$STAR_DIR/${sample_name}/Aligned.out.bam"
+    star_bam="$STAR_DIR/${sample_name}/${sample_name}.bam"
+    mv "$star_bam_raw" "$star_bam"
 
     # About featureCounts arguments:
     # -T: Number of threads
@@ -213,16 +216,16 @@ for fqR1 in "${fqr1s[@]}"; do
 
     # featurecounts cannot handle empty input. so check if the bam from star is empty. 
     # If so, just copy it and touch other output files
-    first_bam_line=$(samtools view "$STAR_DIR/${sample_name}/Aligned.out.bam" | head -n1) || true
+    first_bam_line=$(samtools view $star_bam | head -n1) || true
     if ! echo "$first_bam_line" | grep -q .; then
-        cp "$STAR_DIR/${sample_name}/Aligned.out.bam" "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
+        cp $star_bam "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
         samtools index "$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
         echo "Empty bam, featurecounts not run" > "$FEATURECOUNTS_DIR/${sample_name}.log"
         # Mock featurecounts output
         echo "# Program:featureCounts v2.0.3; Command:mock" > "$FEATURECOUNTS_DIR/${sample_name}.txt"
-        echo "Geneid\tChr\tStart\tEnd\tStrand\tLength\t$STAR_DIR/${sample_name}/Aligned.out.bam" >> "$FEATURECOUNTS_DIR/${sample_name}.txt"
+        echo "Geneid\tChr\tStart\tEnd\tStrand\tLength\t$star_bam" >> "$FEATURECOUNTS_DIR/${sample_name}.txt"
         # Mock featurecounts summary
-        create_mock_summary "$STAR_DIR/${sample_name}/Aligned.out.bam" "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
+        create_mock_summary $star_bam "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
     else
         FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
         if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
@@ -252,7 +255,7 @@ for fqR1 in "${fqr1s[@]}"; do
             --donotsort \
             -R BAM \
             --Rpath "$FEATURECOUNTS_DIR/" \
-            "$STAR_DIR/${sample_name}/Aligned.out.bam" \
+            $star_bam \
             2> "$FEATURECOUNTS_DIR/$sample_name.log" \
         & \
         python -m folitools.add_tags \
@@ -281,7 +284,7 @@ for fqR1 in "${fqr1s[@]}"; do
         mv "$TEMP_BAM.bai" "$FINAL_BAM.bai"
         mv "$TEMP_FC_TXT" "$FINAL_FC_TXT"
         mv "$TEMP_FC_TXT.summary" "$FINAL_FC_TXT.summary"
-        rm "$STAR_DIR/${sample_name}/Aligned.out.bam"
+        rm $star_bam
     fi
     
 

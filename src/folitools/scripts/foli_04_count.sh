@@ -25,8 +25,7 @@ for bam in "${bams[@]}"; do
         continue
     fi
     # split by dot to get the sample name
-    base_bam=$(basename "$bam" .bam)
-    sample_name="${base_bam%%.*}"
+    sample_name="$(basename "$bam" .bam | cut -d. -f1)"
     echo "Processing sample: $sample_name"
 
     # umi_tools behaviors:

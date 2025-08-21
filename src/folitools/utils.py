@@ -34,11 +34,11 @@ def expand_path_to_list(
         # Check if the path is an existing directory
         if os.path.isdir(a):
             a = os.path.join(a, "*")  # Expand to all files in the directory
-        glob_matches = sorted(glob.glob(a, flags=glob.EXTGLOB))
+        # Remove duplicates and sort
+        glob_matches = natsorted(
+            set(glob.glob(a, flags=glob.EXTGLOB)), alg=ns.INT | ns.PATH
+        )
         matches.extend(glob_matches)
-
-    # Remove duplicates and sort
-    matches = natsorted(set(matches), alg=ns.INT | ns.PATH)
 
     # Apply suffix filter if provided
     if suffix:

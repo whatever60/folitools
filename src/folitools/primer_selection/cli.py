@@ -211,9 +211,9 @@ def workflow(
     primer_seq = output_dir / "primer_sequence.tsv"
     primer_info = output_dir / "primer_info.tsv"
     rc1 = _subset(
+        gene_table_file=input_,
         species=species,
         amplicon_size_range=amplicon_size_range,
-        gene_table_file=input_,
         output_primer_sequence=primer_seq,
         output_primer_info=primer_info,
     )
@@ -249,10 +249,10 @@ def workflow(
     # 4) summary (Excel output)
     excel_out = output_dir / "primer_to_order.xlsx"
     _summary(
-        str(input_),
-        str(selected_tsv),
-        str(primer_info),
-        str(excel_out),
+        input_=str(input_),
+        primer_selection=str(selected_tsv),
+        primer_info=str(primer_info),
+        output=str(excel_out),
     )
     return 0
 

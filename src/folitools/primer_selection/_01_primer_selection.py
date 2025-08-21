@@ -88,53 +88,6 @@ def read_gene_metadata(file_path: Path) -> pd.DataFrame:
     return df
 
 
-def _build_input_paths(
-    species: str, amplicon_min: int, amplicon_max: int
-) -> tuple[Path, Path, Path]:
-    """Construct Parquet input file paths for the given parameters.
-
-    Args:
-        species: Species name.
-        amplicon_min: Lower bound of amplicon size.
-        amplicon_max: Upper bound of amplicon size.
-
-    Returns:
-        Tuple of paths:
-          (primer_info_path, primer_sequence_path, transcript_metadata_path)
-    """
-    suffix = f"{amplicon_min}_{amplicon_max}"
-    data_dir = _data_dir_for_species(species)
-    primer_info = data_dir / f"01.primer3_pass.{suffix}.primer_info.parquet"
-    primer_seq = data_dir / f"02.SADDLE_input.{suffix}.primer_0.parquet"
-    transcript_meta = data_dir / f"02.SADDLE_input.{suffix}.transcript_metadata.parquet"
-    return primer_info, primer_seq, transcript_meta
-
-
-def _load_inputs_as_pandas(
-    primer_info_path: Path, primer_seq_path: Path, transcript_meta_path: Path
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load Parquet inputs with polars and convert to pandas.
-
-    Args:
-        primer_info_path: Path to primer metadata Parquet.
-        primer_seq_path: Path to primer sequence Parquet.
-        transcript_meta_path: Path to transcript metadata Parquet.
-
-    Returns:
-        Tuple of pandas DataFrames:
-          (primer_info_df, primer_seq_df, transcript_meta_df)
-    """
-    primer_info_df = pl.read_parquet(primer_info_path).to_pandas()
-    primer_seq_df = pl.read_parquet(primer_seq_path).to_pandas()
-    transcript_meta_df = pl.read_parquet(transcript_meta_path).to_pandas()
-
-    # Ensure chrN is string-like, if present
-    if "chrN" in primer_info_df.columns:
-        primer_info_df["chrN"] = primer_info_df["chrN"].astype("string")
-
-    return primer_info_df, primer_seq_df, transcript_meta_df
-
-
 def _load_and_filter_data(
     transcript_df: pd.DataFrame,
     primer_seq_df: pd.DataFrame,
@@ -271,9 +224,9 @@ def _validate_output_file_extensions(*file_paths: Path) -> None:
 
 
 def subset(
+    gene_table_file: Path,
     species: str,
     amplicon_size_range: tuple[int, int],
-    gene_table_file: Path,
     output_primer_sequence: Path,
     output_primer_info: Path,
 ) -> int:

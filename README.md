@@ -122,6 +122,22 @@ Output files:
 - Processing logs for each sample
 - Final count matrix in TSV format
 
+## Testing
+
+Run all tests:
+```bash
+pytest
+```
+
+Run only shell script tests:
+```bash
+pytest tests/test_shell_scripts.py -v
+```
+
+Run tests with coverage:
+```bash
+pytest --cov=src/folitools --cov-report=html
+```
 
 ## TODO
 

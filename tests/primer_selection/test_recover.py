@@ -23,6 +23,7 @@ from folitools.primer_selection._05_recover import (
     _group_pairs,
     _build_summary_df,
 )
+from folitools.primer_selection.utils import get_prefixes
 
 
 class TestReadIdtExcel:
@@ -52,7 +53,6 @@ class TestClassifyPrimers:
         """Test successful primer classification."""
         df_idt = _read_idt_excel(sample_idt_excel)
         # Use the correct prefixes for has_linker=True
-        from folitools.primer_selection.utils import get_prefixes
         fwd_prefix, rev_prefix = get_prefixes(has_linker=True)
         
         result = _classify_primers(df_idt, fwd_prefix, rev_prefix)

@@ -55,6 +55,7 @@ from ._01_primer_selection import subset as _subset
 from ._02_select_primer_set_by_saddle_loss import saddle as _saddle
 from ._03_extract_region_sequence import product as _product
 from ._04_make_excel import summary as _summary
+from ._05_recover import recover as _recover
 
 
 app = App(name="folitools-primer")
@@ -156,7 +157,14 @@ def product(
 
 @app.command
 def summary(
-    *, input_: Path, primer_selection: Path, primer_info: Path, output: Path
+    *,
+    input_: Path,
+    primer_selection: Path,
+    primer_info: Path,
+    output: Path,
+    output_idt_order: Path | None = None,
+    idt_pool_prefix: str = "pool",
+    has_linker: bool = False,
 ) -> int:
     """Generate an Excel file for primer ordering.
 
@@ -165,6 +173,9 @@ def summary(
         primer_selection: Path to selected primers TSV file.
         primer_info: Path to candidate primer info TSV file.
         output: Path to output Excel file (default: primer_to_order.xlsx).
+        output_idt_order: Optional path to output IDT ordering Excel file.
+        idt_pool_prefix: Prefix for IDT pool names (default: "pool").
+        has_linker: Whether to include linker sequences in primers (default: False).
 
     Returns:
         Process exit code.
@@ -174,7 +185,59 @@ def summary(
         str(primer_selection),
         str(primer_info),
         str(output),
+        has_linker=has_linker,
+        output_idt_order=str(output_idt_order) if output_idt_order else None,
+        idt_pool_prefix=idt_pool_prefix,
     )
+    return 0
+
+
+@app.command
+def recover(
+    *,
+    order_excel: Path,
+    output_dir: Path,
+    species: Literal["mouse", "human"] | None = None,
+    txome_fasta: Path | None = None,
+    has_linker: bool = False,
+    amplicon_length_range: tuple[int, int] = (320, 380),
+    threads: int = 1,
+) -> int:
+    """Recover primer summary from IDT order Excel file.
+
+    Args:
+        order_excel: Path to IDT order Excel file.
+        output_dir: Directory to write recovered files.
+        species: Species for packaged transcriptome ("mouse" or "human").
+        txome_fasta: Path to transcriptome FASTA (overrides species).
+        has_linker: Whether primers include linker sequences.
+        amplicon_length_range: Target amplicon length range (default: 320-380).
+        threads: Number of threads for seqkit locate.
+
+    Returns:
+        Process exit code.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_order_excel = output_dir / "summary_primer_to_order.xlsx"
+    output_report = output_dir / "primer_diagnose.pdf"
+    output_i5 = output_dir / "i5_short.fasta"
+    output_i7 = output_dir / "i7_short.fasta"
+
+    _recover(
+        order_excel=order_excel,
+        txome_fasta=txome_fasta,
+        species=species,
+        has_linker=has_linker,
+        output_order_excel=output_order_excel,
+        output_report=output_report,
+        output_i5=output_i5,
+        output_i7=output_i7,
+        amplicon_length_range=amplicon_length_range,
+        threads=threads,
+    )
+
+    print(f"Recovered files written to: {output_dir}")
     return 0
 
 
@@ -253,6 +316,9 @@ def workflow(
         primer_selection=str(selected_tsv),
         primer_info=str(primer_info),
         output=str(excel_out),
+        has_linker=False,
+        output_idt_order=None,
+        idt_pool_prefix="pool",
     )
     return 0
 

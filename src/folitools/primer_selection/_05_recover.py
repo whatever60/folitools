@@ -16,6 +16,7 @@ from Bio.SeqRecord import SeqRecord
 # Local imports
 from .recover_plot import make_report
 from .utils import get_prefixes, resolve_reference_path
+from .recover_utils import simplify_gene_list
 
 __all__ = ["recover"]
 
@@ -177,8 +178,8 @@ def _enrich_locate_df(
     # Parse pipe-separated identifiers safely
     parts = df["seqID"].astype(str).str.split("|", expand=True)
     df["transcript_id"] = parts[0]
-    df["gene_id"] = parts[1].fillna("")
-    df["gene_symbol"] = parts[5] if parts.shape[1] > 5 else ""
+    df["gene_id"] = parts[1] if parts.shape[1] > 1 else "_NA"
+    df["gene_symbol"] = parts[5] if parts.shape[1] > 5 else parts[0]
 
     merged = pd.merge(df, primer_info, how="left", on="primer_seq")
     missing = merged[merged["pool"].isna()]
@@ -443,7 +444,7 @@ def _sanity_check_sequence_uniqueness(primer_seqs: list[str]) -> None:
     duplicated_primers = vc[vc > 1]
     if not duplicated_primers.empty:
         logger.info(
-            "Sanity check - Duplicate primer sequences found (sequence -> count):"
+            "Sanity check - ⚠️ Duplicate primer sequences found (sequence -> count):"
         )
         for seq, count in duplicated_primers.items():
             logger.info("  %s: %d occurrences", seq, count)
@@ -459,7 +460,7 @@ def _sanity_check_seqkit_patterns(locate_df: pd.DataFrame) -> None:
     duplicated_patterns = vc[vc > 1]
     if not duplicated_patterns.empty:
         logger.info(
-            "Sanity check - Duplicate patterns found in seqkit locate output (pattern -> count):"
+            "Sanity check - ⚠️ Duplicate patterns found in seqkit locate output (pattern -> count):"
         )
         for pattern, count in duplicated_patterns.items():
             logger.info("  %s: %d occurrences", pattern, count)
@@ -603,8 +604,8 @@ def _sanity_check_primer_pair_relationships(grouped: pd.DataFrame) -> None:
         logger.info("  ✅ One-to-one primer relationships maintained")
     else:
         logger.info("  ⚠️ Some primers are reused in multiple pairs")
-        logger.info("  Maximum times a forward primer is used: %d", fwd_max_usage)
-        logger.info("  Maximum times a reverse primer is used: %d", rev_max_usage)
+        logger.info("    Maximum times a forward primer is used: %d", fwd_max_usage)
+        logger.info("    Maximum times a reverse primer is used: %d", rev_max_usage)
 
 
 def recover(
@@ -678,6 +679,7 @@ def recover(
 
     # Enumerate and filter amplicons
     amplicon_all = _build_amplicons(locate_df_final)
+
     lo, hi = amplicon_length_range
     amplicon_sub = amplicon_all[
         amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
@@ -685,6 +687,14 @@ def recover(
     _sanity_check_genes_per_primer_pair(amplicon_sub)
     _sanity_check_amplicons_per_pair(amplicon_sub)
     _sanity_check_cross_pool_amplicons(amplicon_sub)
+    if output_report is not None:
+        make_report(
+            Path(output_report),
+            amplicon_all,
+            amplicon_sub,
+            locate_df_final,
+            amplicon_length_range,
+        )
 
     # Group per primer pair and construct final sheet
     grouped = _group_pairs(amplicon_sub)
@@ -698,24 +708,29 @@ def recover(
         out_xlsx.parent.mkdir(parents=True, exist_ok=True)
         summary_df.to_excel(out_xlsx, index=False)
 
-    if output_report is not None:
-        make_report(
-            Path(output_report),
-            amplicon_all,
-            amplicon_sub,
-            locate_df_final,
-            amplicon_length_range,
-        )
-
     # i5/i7 short FASTAs
-    _write_short_fastas(summary_df, output_i5, output_i7)
+    if output_i5 is not None:
+        _write_fasta(summary_df, "L_seq", str(output_i5))
+    if output_i7 is not None:
+        _write_fasta(summary_df, "R_seq", str(output_i7))
 
     return summary_df
 
 
-def _write_short_fastas(
-    summary_df: pd.DataFrame, output_i5: str | Path | None, output_i7: str | Path | None
-) -> None:
+def collapse_to_id(series: pd.Series) -> str:
+    symbols: set[str] = set()
+    # Gather unique symbols from "multi_mapping" entries across the group
+    for multi in series.dropna().astype(str):
+        for part in multi.split(";"):
+            fields = part.split("|")
+            assert len(fields) >= 3
+            symbols.add(fields[2])
+    rid = "|".join(sorted(symbols)) if symbols else "_NA"
+    # Keep existing behavior of simplifying the gene list
+    return simplify_gene_list(rid)
+
+
+def _write_fasta(summary_df: pd.DataFrame, seq_col: str, output_path: str) -> None:
     """Write i5/i7 *short* FASTAs from the recovered summary.
 
     The short sequences correspond to the display `L_seq`/`R_seq` columns in the
@@ -729,63 +744,27 @@ def _write_short_fastas(
         output_i5: Destination path for the i5 short FASTA (forward). If None, skip.
         output_i7: Destination path for the i7 short FASTA (reverse). If None, skip.
     """
-    if summary_df.empty:
-        return
+    out_path = Path(output_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _build_mapping(df: pd.DataFrame, seq_col: str) -> pd.DataFrame:
-        grouped = (
-            df[[seq_col, "multi_mapping"]]
-            .groupby(seq_col, as_index=False)
-            .agg({"multi_mapping": lambda x: ";".join(x)})
-        )
-        return grouped
+    # Collapse multi-mapping to a simplified record_id per unique sequence.
+    mapping_df = (
+        summary_df[[seq_col, "multi_mapping"]]
+        .groupby(seq_col, as_index=False)
+        .agg(record_id=("multi_mapping", collapse_to_id))
+    )
+    used_ids: set[str] = set()
 
-    def _id_from_multi_mapping(multi: str) -> str:
-        if not isinstance(multi, str) or not multi:
-            return "NA"
-        symbols: set[str] = set()
-        for part in multi.split(";"):
-            fields = part.split("|")
-            if len(fields) >= 3 and fields[2]:
-                symbols.add(fields[2])
-        return "|".join(sorted(symbols)) if symbols else "NA"
-
-    if output_i5 is not None:
-        out = Path(output_i5)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        fwd_df = _build_mapping(summary_df, "L_seq")
-        used_ids: set[str] = set()
-        with open(out, "w") as handle:
-            for _, row in fwd_df.iterrows():
-                seq: str = str(row["L_seq"]).upper()
-                rid = _id_from_multi_mapping(str(row["multi_mapping"]))
-                base = rid if rid else "NA"
-                rid_final = base
-                k = 1
-                while rid_final in used_ids:
-                    rid_final = f"{base}.{k}"
-                    k += 1
-                used_ids.add(rid_final)
-                SeqIO.write(
-                    SeqRecord(Seq(seq), id=rid_final, description=""), handle, "fasta"
-                )
-
-    if output_i7 is not None:
-        out = Path(output_i7)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        rev_df = _build_mapping(summary_df, "R_seq")
-        used_ids: set[str] = set()
-        with open(out, "w") as handle:
-            for _, row in rev_df.iterrows():
-                seq: str = str(row["R_seq"]).upper()
-                rid = _id_from_multi_mapping(str(row["multi_mapping"]))
-                base = rid if rid else "NA"
-                rid_final = base
-                k = 1
-                while rid_final in used_ids:
-                    rid_final = f"{base}.{k}"
-                    k += 1
-                used_ids.add(rid_final)
-                SeqIO.write(
-                    SeqRecord(Seq(seq), id=rid_final, description=""), handle, "fasta"
-                )
+    with open(out_path, "w") as handle:
+        for _, row in mapping_df.iterrows():
+            seq: str = str(row[seq_col]).upper()
+            rid: str = str(row["record_id"])
+            rid_final = rid
+            k = 1
+            while rid_final in used_ids:
+                rid_final = f"{rid}.{k}"
+                k += 1
+            used_ids.add(rid_final)
+            SeqIO.write(
+                SeqRecord(Seq(seq), id=rid_final, description=""), handle, "fasta"
+            )

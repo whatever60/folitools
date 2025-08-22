@@ -6,7 +6,6 @@ from pathlib import Path
 import tempfile
 import os
 
-import numpy as np
 import pandas as pd
 import polars as pl
 from Bio import SeqIO

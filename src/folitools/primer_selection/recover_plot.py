@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib as mpl
 from matplotlib_venn import venn2
 
 
@@ -33,7 +34,10 @@ def make_report(
     out_pdf = Path(out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
-    with PdfPages(out_pdf) as pdf:
+    with (
+        mpl.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}),
+        PdfPages(out_pdf) as pdf,
+    ):
         # Page 1: amplicon length histogram
         fig1, ax1 = plt.subplots(figsize=(6, 4.5))
         if not amplicon_all.empty:
@@ -55,25 +59,25 @@ def make_report(
 
         # Page 2: venn of primers
         # Sanity check: The venn diagram is to check whether all primers are involved in at least one amplicon.
-        fig2, ax2 = plt.subplots(figsize=(5, 5))
-        primers_amp = set(amplicon_sub["primer_seq_fwd"].tolist()) | set(
-            amplicon_sub["primer_seq_rev"].tolist()
-        )
-        primers_all = set(locate_final["primer_seq"].tolist())
-        venn2((primers_amp, primers_all), set_labels=("Amplicon", "All"), ax=ax2)
-        ax2.set_title("Primers participating in valid amplicons")
-        pdf.savefig(fig2)
-        plt.close(fig2)
+        # fig2, ax2 = plt.subplots(figsize=(5, 5))
+        # primers_amp = set(amplicon_sub["primer_seq_fwd"].tolist()) | set(
+        #     amplicon_sub["primer_seq_rev"].tolist()
+        # )
+        # primers_all = set(locate_final["primer_seq"].tolist())
+        # venn2((primers_amp, primers_all), set_labels=("Amplicon", "All"), ax=ax2)
+        # ax2.set_title("Primers participating in valid amplicons")
+        # pdf.savefig(fig2)
+        # plt.close(fig2)
 
-        # Page 3: histogram of number of transcripts per pair
-        fig3, ax3 = plt.subplots(figsize=(6, 4.5))
-        if not amplicon_sub.empty:
-            counts = amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])[  # type: ignore[call-arg]
-                "transcript_id"
-            ].nunique()
-            ax3.hist(counts.tolist(), bins=np.arange(0.5, counts.max() + 1.5).tolist())
-        ax3.set_xlabel("# transcripts per primer pair (within range)")
-        ax3.set_ylabel("Count")
-        ax3.set_title("Mapping multiplicity")
-        pdf.savefig(fig3)
-        plt.close(fig3)
+        # # Page 3: histogram of number of transcripts per pair
+        # fig3, ax3 = plt.subplots(figsize=(6, 4.5))
+        # if not amplicon_sub.empty:
+        #     counts = amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])[
+        #         "transcript_id"
+        #     ].nunique()
+        #     ax3.hist(counts.tolist(), bins=np.arange(0.5, counts.max() + 1.5).tolist())
+        # ax3.set_xlabel("# transcripts per primer pair (within range)")
+        # ax3.set_ylabel("Count")
+        # ax3.set_title("Mapping multiplicity")
+        # pdf.savefig(fig3)
+        # plt.close(fig3)

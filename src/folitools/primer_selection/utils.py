@@ -52,11 +52,11 @@ def resolve_reference_path(
         ValueError: If neither `species` nor `txome_fasta` is provided.
         FileNotFoundError: If the resolved FASTA path does not exist.
     """
-    if species is not None:
+    if txome_fasta is not None:
+        ref_path = Path(txome_fasta)
+    elif species is not None:
         species_dir = _data_dir_for_species(species)
         ref_path = species_dir / SPECIES_FASTA_NAME[species]
-    elif txome_fasta is not None:
-        ref_path = Path(txome_fasta)
     else:
         raise ValueError("Either species or txome_fasta must be provided.")
 

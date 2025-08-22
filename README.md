@@ -125,6 +125,77 @@ Output files:
 - Processing logs for each sample
 - Final count matrix in TSV format
 
+## Primer Selection Functionality
+
+The primer selection module provides tools for designing and recovering PCR primer sets for targeted amplicon sequencing experiments.
+
+### Workflow
+
+The primer selection workflow provides a complete pipeline for primer design:
+
+```bash
+# Run complete primer design workflow using built-in reference
+foli-primer workflow --genes genes.tsv --species mouse --output-dir primer_design/
+
+# Or use custom transcriptome FASTA for better coverage
+foli-primer workflow --genes genes.tsv --txome-fasta /path/to/transcriptome.fasta --output-dir primer_design/
+```
+
+**Input**: Gene table TSV with columns `gene` and `group`  
+**Output**: Complete primer design including optimized primer sets, amplicon sequences, and IDT-compatible ordering files
+
+**Note**: You can use either `--species` (mouse/human) for built-in references or `--txome-fasta` for custom transcriptome files. Custom FASTA files often provide better gene coverage than the built-in Gencode references.
+
+### Recover
+
+The recover functionality helps validate and analyze primer sets from IDT order files:
+
+```bash
+# Recover primer information using built-in reference
+foli-primer recover --order-excel idt_order.xlsx --output-dir recovered_output/ --species human
+
+# Or use custom transcriptome FASTA (recommended for better coverage)
+foli-primer recover --order-excel idt_order.xlsx --output-dir recovered_output/ --txome-fasta /path/to/transcriptome.fasta
+```
+
+This command analyzes primer sequences from an IDT order file, validates them against a reference transcriptome, and generates output files for downstream analysis.
+
+**Note**: Using `--txome-fasta` with a custom transcriptome file is recommended over the built-in `--species` references as it typically provides better gene coverage than the packaged Gencode references.
+
+**Optional parameters:**
+- `--txome-fasta`: Use custom transcriptome FASTA instead of packaged reference (recommended)
+- `--species`: Use built-in transcriptome ("mouse" or "human")  
+- `--has-linker`: Include if primers contain linker sequences
+- `--amplicon-length-range`: Target amplicon length range (default: 320-380bp)
+- `--threads`: Number of threads for sequence alignment
+
+**Input**: IDT order Excel file with primer sequences  
+**Output**: 
+- `summary_primer_to_order.xlsx`: Validated primer summary with amplicon information
+- `primer_diagnose.pdf`: PDF report with analysis plots and statistics
+- `i5_short.fasta` and `i7_short.fasta`: FASTA files for sequencing adapters
+
+### Dimer Evaluation (through Python)
+
+A primer set can be evaluated by calculating the thermodynamic properties of potential primer dimers for each pair of primers.
+
+```python
+from folitools.primer_selection.eval_dimer import dimer_thermo_property
+
+# Evaluate primer-dimer interactions
+result_matrix = dimer_thermo_property(
+    primer_fwd_fasta="forward_primers.fasta",
+    primer_rev_fasta="reverse_primers.fasta", 
+    output_dir="dimer_analysis/",
+    output_suffix="_analysis"
+)
+```
+
+**Input**: FASTA files containing forward and reverse primer sequences  
+**Output**: 
+- Pairwise interaction matrix with thermodynamic properties
+- Detailed analysis files in the output directory
+
 ## Testing
 
 Run all tests:

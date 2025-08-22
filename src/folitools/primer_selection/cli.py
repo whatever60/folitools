@@ -134,7 +134,7 @@ def product(
     primer_info: Path,
     output_fasta: Path,
     species: Literal["mouse", "human"] | None = None,
-    reference: Path | None = None,
+    txome_fasta: Path | None = None,
 ) -> int:
     """Extract amplicon regions to FASTA from selected primer set.
 
@@ -142,8 +142,8 @@ def product(
         input_: TSV from SADDLE stage (selected pairs).
         primer_info: TSV from subset stage (primer metadata).
         output_fasta: Output FASTA path for extracted regions.
-        species: If provided (and `reference` not set), use packaged reference for species.
-        reference: Optional explicit FASTA path (overrides `species`).
+        species: If provided (and `txome_fasta` not set), use packaged reference for species.
+        txome_fasta: Optional explicit FASTA path (overrides `species`).
 
     Returns:
         Process exit code.
@@ -153,7 +153,7 @@ def product(
         primer_info_tsv=primer_info,
         output_fasta=output_fasta,
         species=species,
-        reference=reference,
+        reference=txome_fasta,
     )
     return 0
 
@@ -200,8 +200,8 @@ def recover(
     *,
     order_excel: Path,
     output_dir: Path,
-    species: Literal["mouse", "human"] | None = None,
     txome_fasta: Path | None = None,
+    species: Literal["mouse", "human"] | None = None,
     has_linker: bool = False,
     amplicon_length_range: tuple[int, int] = (320, 380),
     threads: int = 1,
@@ -247,8 +247,8 @@ def workflow(
     *,
     input_: Path,  # gene table TSV
     species: Literal["mouse", "human"],
-    reference: Path | None = None,
-    amplicon_size_range: tuple[int, int],
+    txome_fasta: Path | None = None,
+    amplicon_size_range: tuple[int, int] = (320, 380),
     output_dir: Path,
     num_cycles_anneal: int = 50,
     random_seed: int = 42,
@@ -258,7 +258,8 @@ def workflow(
 
     Args:
         input_: Gene table TSV (columns: gene, group; optional primer_fwd, primer_rev).
-        species: Species key for packaged data and reference (e.g., "mouse").
+        species: Species key for packaged data and reference (e.g., "mouse"). Required for primer candidate generation.
+        txome_fasta: Optional explicit FASTA path for amplicon extraction (overrides species for final stage).
         amplicon_size_range: Two integers MIN MAX (e.g., 320 380).
         output_dir: Directory to write all outputs.
         num_cycles_anneal: SADDLE iterations (default: 50).
@@ -301,7 +302,7 @@ def workflow(
         primer_info_tsv=primer_info,
         output_fasta=region_fa,
         species=species,
-        reference=reference,
+        reference=txome_fasta,
     )
 
     # 4) summary (Excel output)

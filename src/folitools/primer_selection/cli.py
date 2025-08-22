@@ -204,7 +204,7 @@ def recover(
     species: Literal["mouse", "human"] | None = None,
     has_linker: bool = False,
     amplicon_length_range: tuple[int, int] = (320, 380),
-    threads: int = 1,
+    cores: int = 1,
 ) -> int:
     """Recover primer summary from IDT order Excel file.
 
@@ -215,7 +215,7 @@ def recover(
         txome_fasta: Path to transcriptome FASTA (overrides species).
         has_linker: Whether primers include linker sequences.
         amplicon_length_range: Target amplicon length range (default: 320-380).
-        threads: Number of threads for seqkit locate.
+        cores: Number of cores for seqkit locate.
 
     Returns:
         Process exit code.
@@ -237,7 +237,7 @@ def recover(
         output_i5=output_i5,
         output_i7=output_i7,
         amplicon_length_range=amplicon_length_range,
-        threads=threads,
+        threads=cores,
     )
     return 0
 

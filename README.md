@@ -167,7 +167,7 @@ This command analyzes primer sequences from an IDT order file, validates them ag
 - `--species`: Use built-in transcriptome ("mouse" or "human")  
 - `--has-linker`: Include if primers contain linker sequences
 - `--amplicon-length-range`: Target amplicon length range (default: 320-380bp)
-- `--threads`: Number of threads for sequence alignment
+- `--cores`: Number of cores for sequence alignment
 
 **Input**: IDT order Excel file with primer sequences  
 **Output**: 

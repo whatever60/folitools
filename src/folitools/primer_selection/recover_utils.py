@@ -5,23 +5,34 @@ import re
 
 
 # ---------- patterns (compiled once) ----------
-_ENS_GENE_RE = re.compile(r"ENS[A-Z]*G\d{11}(?:\.\d+)?$")      # e.g., ENSG..., ENSMUSG..., optional version
-_GENE_MODEL_RE = re.compile(r"Gm\d+(?:[A-Za-z0-9]+)?$")        # mouse "gene model" placeholders: Gm10358, Gm3839
-_PSEUDOGENE_SUFFIX_RE = re.compile(r"[A-Z0-9]{4,}P\d+$")       # HMGB1P1, RPL23AP82, TP73P1 (avoid false hits like MMP24)
+_ENS_GENE_RE = re.compile(
+    r"ENS[A-Z]*G\d{11}(?:\.\d+)?$"
+)  # e.g., ENSG..., ENSMUSG..., optional version
+_GENE_MODEL_RE = re.compile(
+    r"Gm\d+(?:[A-Za-z0-9]+)?$"
+)  # mouse "gene model" placeholders: Gm10358, Gm3839
+_PSEUDOGENE_SUFFIX_RE = re.compile(
+    r"[A-Z0-9]{4,}P\d+$"
+)  # HMGB1P1, RPL23AP82, TP73P1 (avoid false hits like MMP24)
 _LNC_LIKE_PATTERNS = [
-    re.compile(r".*OS\d*$"),                 # MMP24OS, ...OS2
-    re.compile(r".*-AS\d*$"),                # FOXP3-AS1, ...-AS2
-    re.compile(r".*-AS$"),                   # ...-AS
-    re.compile(r"^LINC\d+[A-Z]*$"),          # LINC01234
-    re.compile(r"^(AC|AL)\d{3,}(?:\.\d+)?$"),# AC123456.1 / AL123456.1 (common lnc placeholders)
-    re.compile(r"^RP\d+-\d+(?:\.\d+)?$"),    # RP11-... style placeholders
+    re.compile(r".*OS\d*$"),  # MMP24OS, ...OS2
+    re.compile(r".*-AS\d*$"),  # FOXP3-AS1, ...-AS2
+    re.compile(r".*-AS$"),  # ...-AS
+    re.compile(r"^LINC\d+[A-Z]*$"),  # LINC01234
+    re.compile(
+        r"^(AC|AL)\d{3,}(?:\.\d+)?$"
+    ),  # AC123456.1 / AL123456.1 (common lnc placeholders)
+    re.compile(r"^RP\d+-\d+(?:\.\d+)?$"),  # RP11-... style placeholders
 ]
-_READTHROUGH_SPLIT_RE = re.compile(r"([A-Za-z0-9]+)-([A-Za-z0-9]+)$")  # simple A-B readthrough symbol
+_READTHROUGH_SPLIT_RE = re.compile(
+    r"([A-Za-z0-9]+)-([A-Za-z0-9]+)$"
+)  # simple A-B readthrough symbol
 
 
 @dataclass(frozen=True)
 class TokenDecision:
     """Decision record for a single token."""
+
     token: str
     kept: bool
     reason: str  # e.g., "informative", "dropped: ensembl_id", "dropped: readthrough_component_present", ...
@@ -69,16 +80,24 @@ def _token_decisions(tokens: list[str]) -> list[TokenDecision]:
     for tok in tokens:
         # hard uninformative classes
         if _is_ensembl_gene_id(tok):
-            decisions.append(TokenDecision(tok, kept=False, reason="dropped: ensembl_id"))
+            decisions.append(
+                TokenDecision(tok, kept=False, reason="dropped: ensembl_id")
+            )
             continue
         if _is_gene_model(tok):
-            decisions.append(TokenDecision(tok, kept=False, reason="dropped: gene_model_placeholder"))
+            decisions.append(
+                TokenDecision(tok, kept=False, reason="dropped: gene_model_placeholder")
+            )
             continue
         if _is_pseudogene_by_suffix(tok):
-            decisions.append(TokenDecision(tok, kept=False, reason="dropped: pseudogene_suffix"))
+            decisions.append(
+                TokenDecision(tok, kept=False, reason="dropped: pseudogene_suffix")
+            )
             continue
         if _is_lnc_like_symbol(tok):
-            decisions.append(TokenDecision(tok, kept=False, reason="dropped: lnc_like_placeholder"))
+            decisions.append(
+                TokenDecision(tok, kept=False, reason="dropped: lnc_like_placeholder")
+            )
             continue
 
         # readthrough (context-aware)
@@ -86,9 +105,19 @@ def _token_decisions(tokens: list[str]) -> list[TokenDecision]:
         if parts is not None:
             left, right = parts
             if left in token_set or right in token_set:
-                decisions.append(TokenDecision(tok, kept=False, reason="dropped: readthrough_component_present"))
+                decisions.append(
+                    TokenDecision(
+                        tok, kept=False, reason="dropped: readthrough_component_present"
+                    )
+                )
             else:
-                decisions.append(TokenDecision(tok, kept=True, reason="informative (readthrough_no_component_present)"))
+                decisions.append(
+                    TokenDecision(
+                        tok,
+                        kept=True,
+                        reason="informative (readthrough_no_component_present)",
+                    )
+                )
             continue
 
         # default informative
@@ -96,10 +125,12 @@ def _token_decisions(tokens: list[str]) -> list[TokenDecision]:
 
     # if no informative tokens at all, keep everything (mark reason accordingly)
     if not any(d.kept for d in decisions):
-        return [TokenDecision(d.token, kept=True, reason="kept: all_tokens_uninformative") for d in decisions]
+        return [
+            TokenDecision(d.token, kept=True, reason="kept: all_tokens_uninformative")
+            for d in decisions
+        ]
 
     return decisions
-
 
 
 # ---------- public API ----------
@@ -107,11 +138,11 @@ def _simplify_gene_list_internal(
     gene_string: str, *, with_audit: bool = False
 ) -> tuple[str, dict[str, str]]:
     """Internal implementation for gene list simplification.
-    
+
     Args:
         gene_string: Input like "KLRC4-KLRK1|KLRK1|ENSG00000173366|TLR9".
         with_audit: If True, include dropped reasons in return value.
-    
+
     Returns:
         A tuple (simplified_string, dropped_reason_map).
         When with_audit=False, dropped_reason_map will be empty.
@@ -125,7 +156,9 @@ def _simplify_gene_list_internal(
         dropped = {}
     else:
         kept_tokens = [d.token for d in decisions if d.kept]
-        dropped = {d.token: d.reason for d in decisions if not d.kept} if with_audit else {}
+        dropped = (
+            {d.token: d.reason for d in decisions if not d.kept} if with_audit else {}
+        )
 
     simplified_string = "|".join(kept_tokens)
     return simplified_string, dropped
@@ -162,6 +195,3 @@ def simplify_gene_list_with_audit(gene_string: str) -> tuple[str, dict[str, str]
           • dropped_reason_map maps each dropped token to its reason.
     """
     return _simplify_gene_list_internal(gene_string, with_audit=True)
-
-
-

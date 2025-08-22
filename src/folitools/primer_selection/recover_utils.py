@@ -1,107 +1,167 @@
-import re
+# gene_simplify.py
+from dataclasses import dataclass
 from collections import OrderedDict
+import re
+
+
+# ---------- patterns (compiled once) ----------
+_ENS_GENE_RE = re.compile(r"ENS[A-Z]*G\d{11}(?:\.\d+)?$")      # e.g., ENSG..., ENSMUSG..., optional version
+_GENE_MODEL_RE = re.compile(r"Gm\d+(?:[A-Za-z0-9]+)?$")        # mouse "gene model" placeholders: Gm10358, Gm3839
+_PSEUDOGENE_SUFFIX_RE = re.compile(r"[A-Z0-9]{4,}P\d+$")       # HMGB1P1, RPL23AP82, TP73P1 (avoid false hits like MMP24)
+_LNC_LIKE_PATTERNS = [
+    re.compile(r".*OS\d*$"),                 # MMP24OS, ...OS2
+    re.compile(r".*-AS\d*$"),                # FOXP3-AS1, ...-AS2
+    re.compile(r".*-AS$"),                   # ...-AS
+    re.compile(r"^LINC\d+[A-Z]*$"),          # LINC01234
+    re.compile(r"^(AC|AL)\d{3,}(?:\.\d+)?$"),# AC123456.1 / AL123456.1 (common lnc placeholders)
+    re.compile(r"^RP\d+-\d+(?:\.\d+)?$"),    # RP11-... style placeholders
+]
+_READTHROUGH_SPLIT_RE = re.compile(r"([A-Za-z0-9]+)-([A-Za-z0-9]+)$")  # simple A-B readthrough symbol
+
+
+@dataclass(frozen=True)
+class TokenDecision:
+    """Decision record for a single token."""
+    token: str
+    kept: bool
+    reason: str  # e.g., "informative", "dropped: ensembl_id", "dropped: readthrough_component_present", ...
+
+
+# ---------- helpers ----------
+def _is_ensembl_gene_id(symbol: str) -> bool:
+    return bool(_ENS_GENE_RE.fullmatch(symbol))
+
+
+def _is_gene_model(symbol: str) -> bool:
+    return bool(_GENE_MODEL_RE.fullmatch(symbol))
+
+
+def _is_pseudogene_by_suffix(symbol: str) -> bool:
+    return bool(_PSEUDOGENE_SUFFIX_RE.fullmatch(symbol))
+
+
+def _is_lnc_like_symbol(symbol: str) -> bool:
+    return any(p.fullmatch(symbol) for p in _LNC_LIKE_PATTERNS)
+
+
+def _readthrough_parts(symbol: str) -> tuple[str, str] | None:
+    """Return (left, right) if `symbol` looks like a simple readthrough A-B; otherwise None."""
+    m = _READTHROUGH_SPLIT_RE.fullmatch(symbol)
+    if not m:
+        return None
+    left, right = m.group(1), m.group(2)
+    return (left, right) if left and right else None
+
+
+def _token_decisions(tokens: list[str]) -> list[TokenDecision]:
+    """
+    Classify tokens as informative or not, applying context-aware rules for readthroughs.
+
+    Rules (as requested):
+      • Pseudogene / lncRNA-like / gene models / plain Ensembl IDs are uninformative in all contexts.
+      • Readthrough 'A-B' is uninformative only when any component (A or B) is present;
+        otherwise it is considered informative.
+      • Everything else is informative.
+    """
+    token_set = set(tokens)
+    decisions: list[TokenDecision] = []
+
+    for tok in tokens:
+        # hard uninformative classes
+        if _is_ensembl_gene_id(tok):
+            decisions.append(TokenDecision(tok, kept=False, reason="dropped: ensembl_id"))
+            continue
+        if _is_gene_model(tok):
+            decisions.append(TokenDecision(tok, kept=False, reason="dropped: gene_model_placeholder"))
+            continue
+        if _is_pseudogene_by_suffix(tok):
+            decisions.append(TokenDecision(tok, kept=False, reason="dropped: pseudogene_suffix"))
+            continue
+        if _is_lnc_like_symbol(tok):
+            decisions.append(TokenDecision(tok, kept=False, reason="dropped: lnc_like_placeholder"))
+            continue
+
+        # readthrough (context-aware)
+        parts = _readthrough_parts(tok)
+        if parts is not None:
+            left, right = parts
+            if left in token_set or right in token_set:
+                decisions.append(TokenDecision(tok, kept=False, reason="dropped: readthrough_component_present"))
+            else:
+                decisions.append(TokenDecision(tok, kept=True, reason="informative (readthrough_no_component_present)"))
+            continue
+
+        # default informative
+        decisions.append(TokenDecision(tok, kept=True, reason="informative"))
+
+    # if no informative tokens at all, keep everything (mark reason accordingly)
+    if not any(d.kept for d in decisions):
+        return [TokenDecision(d.token, kept=True, reason="kept: all_tokens_uninformative") for d in decisions]
+
+    return decisions
+
+
+
+# ---------- public API ----------
+def _simplify_gene_list_internal(
+    gene_string: str, *, with_audit: bool = False
+) -> tuple[str, dict[str, str]]:
+    """Internal implementation for gene list simplification.
+    
+    Args:
+        gene_string: Input like "KLRC4-KLRK1|KLRK1|ENSG00000173366|TLR9".
+        with_audit: If True, include dropped reasons in return value.
+    
+    Returns:
+        A tuple (simplified_string, dropped_reason_map).
+        When with_audit=False, dropped_reason_map will be empty.
+    """
+    raw_tokens = [t.strip() for t in gene_string.split("|") if t.strip()]
+    tokens: list[str] = list(OrderedDict((t, None) for t in raw_tokens).keys())
+
+    decisions = _token_decisions(tokens)
+    if any(d.reason == "kept: all_tokens_uninformative" for d in decisions):
+        kept_tokens = [d.token for d in decisions]  # keep all (deduped)
+        dropped = {}
+    else:
+        kept_tokens = [d.token for d in decisions if d.kept]
+        dropped = {d.token: d.reason for d in decisions if not d.kept} if with_audit else {}
+
+    simplified_string = "|".join(kept_tokens)
+    return simplified_string, dropped
 
 
 def simplify_gene_list(gene_string: str) -> str:
-    """Simplify a '|' separated gene string by removing redundant tokens.
+    """Simplify a '|' separated gene string by removing redundant/uninformative tokens.
 
-    Rules (conservative defaults):
-      1) Drop bare Ensembl IDs (ENSG...) if any named symbols are present.
-      2) Drop readthrough symbols of the form 'A-B' iff 'B' is also present.
-      3) Drop pseudogene copies like '<PARENT>P<digits>' iff <PARENT> is present.
-      4) Keep antisense/OS (e.g., MMP24OS) and '-like' paralogs (e.g., H2BC12L).
-      5) Optionally consolidate DEFA1/DEFA3 -> DEFA1A3 when both present.
+    Behavior:
+      • If there is at least one informative symbol, keep all and only the informative ones.
+      • If all tokens are uninformative, keep everything (order-stable, de-duplicated).
+      • Readthrough 'A-B' is uninformative only when any component is present; otherwise informative.
+      • Pseudogene / lncRNA-like / gene models / plain Ensembl IDs are uninformative regardless.
 
     Args:
         gene_string: Input like "KLRC4-KLRK1|KLRK1|ENSG00000173366|TLR9".
-        collapse_defa_locus: If True, replace co-present DEFA1 & DEFA3 with DEFA1A3.
 
     Returns:
-        A '|' joined simplified string, preserving original order where possible.
-
-    Examples:
-        >>> simplify_gene_list("KLRC4-KLRK1|KLRK1")
-        'KLRK1'
-        >>> simplify_gene_list("ENSG00000173366|TLR9")
-        'TLR9'
-        >>> simplify_gene_list("HMGB1|HMGB1P1")
-        'HMGB1'
-        >>> simplify_gene_list("HMGB1P1")
-        'HMGB1P1'
-        >>> simplify_gene_list("MMP24|MMP24OS")
-        'MMP24|MMP24OS'
-        >>> simplify_gene_list("H2BC12|H2BC12L")
-        'H2BC12|H2BC12L'
-        >>> simplify_gene_list("DEFA1|DEFA3|DEFA1B")
-        'DEFA1|DEFA3|DEFA1B'
-        >>> simplify_gene_list("DEFA1|DEFA3|DEFA1B", collapse_defa_locus=True)
-        'DEFA1A3|DEFA1B'
+        A '|' joined simplified string, preserving first-seen order among kept tokens.
     """
-    # ---- tokenize & normalize ----
-    raw_tokens = [t.strip() for t in gene_string.split("|") if t.strip()]
-    # Ordered unique, preserving first occurrence
-    tokens: list[str] = list(OrderedDict((t, None) for t in raw_tokens).keys())
-    token_set: set[str] = set(tokens)
+    simplified_string, _ = _simplify_gene_list_internal(gene_string, with_audit=False)
+    return simplified_string
 
-    def is_ensembl_gene_id(sym: str) -> bool:
-        return bool(re.fullmatch(r"ENSG\d{11}(?:\.\d+)?", sym))
 
-    def readthrough_components(sym: str) -> tuple[str, str] | None:
-        # Only treat simple one-hyphen forms as readthrough candidates
-        if sym.count("-") != 1:
-            return None
-        left, right = sym.split("-", 1)
-        if not left or not right:
-            return None
-        return (left, right)
+def simplify_gene_list_with_audit(gene_string: str) -> tuple[str, dict[str, str]]:
+    """Simplify a gene string and also return a map of dropped tokens → reason.
 
-    def parent_if_pseudogene(sym: str) -> str | None:
-        # Only consider dropping if parent (prefix before 'P<number>') is present exactly.
-        m = re.fullmatch(r"([A-Z0-9]+)P\d+", sym)
-        if m:
-            parent = m.group(1)
-            if parent in token_set:
-                return parent
-        return None
+    Args:
+        gene_string: Input like "KLRC4-KLRK1|KLRK1|ENSG00000173366|TLR9".
 
-    # ---- 1) Drop ENSG IDs if any named symbol exists ----
-    any_named = any(not is_ensembl_gene_id(t) for t in tokens)
-    if any_named:
-        tokens = [t for t in tokens if not is_ensembl_gene_id(t)]
-        token_set = set(tokens)
+    Returns:
+        A pair (simplified_string, dropped_reason_map), where:
+          • simplified_string is the '|' joined kept tokens.
+          • dropped_reason_map maps each dropped token to its reason.
+    """
+    return _simplify_gene_list_internal(gene_string, with_audit=True)
 
-    # ---- 2) Drop readthrough 'A-B' iff 'B' present ----
-    pruned: list[str] = []
-    for t in tokens:
-        parts = readthrough_components(t)
-        if parts and parts[1] in token_set:
-            # Keep only the simpler downstream gene already present
-            continue
-        pruned.append(t)
-    tokens = pruned
-    token_set = set(tokens)
 
-    # ---- 3) Drop pseudogenes '<PARENT>P<digits>' iff parent present ----
-    pruned = []
-    for t in tokens:
-        parent = parent_if_pseudogene(t)
-        if parent is not None:
-            # Parent symbol already present -> drop this pseudogene token
-            continue
-        pruned.append(t)
-    tokens = pruned
-    token_set = set(tokens)
 
-    # # ---- 5) Optional DEFA locus consolidation ----
-    # if collapse_defa_locus:
-    #     has_defa1 = "DEFA1" in token_set
-    #     has_defa3 = "DEFA3" in token_set
-    #     if has_defa1 and has_defa3:
-    #         # Replace the earlier of the two with DEFA1A3 and remove the other
-    #         first_idx = min(tokens.index("DEFA1"), tokens.index("DEFA3"))
-    #         # Remove both
-    #         tokens = [t for t in tokens if t not in {"DEFA1", "DEFA3"}]
-    #         # Insert DEFA1A3 at the earliest position
-    #         tokens.insert(first_idx, "DEFA1A3")
-
-    return "|".join(tokens)

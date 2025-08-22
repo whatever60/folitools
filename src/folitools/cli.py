@@ -11,8 +11,8 @@ from .primer_info import get_read_stats
 from .utils import expand_path_to_list
 
 app = App(help="Foli Tools CLI")
-
-# Get the directory where the scripts are located, relative to this CLI script.
+FASTQ_EXTENSIONS = ["fq", "fastq", "fq.gz", "fastq.gz"]
+BAM_EXTENSIONS = ["bam", "sam", "sam.gz", "sam.bz2"]
 
 
 def run(script_name: str, args: tuple) -> None:
@@ -53,7 +53,7 @@ def qc(
         cores: Number of CPU cores to allocate for fastp.
     """
     # Expand patterns to actual file paths
-    file_paths = expand_path_to_list(input_)
+    file_paths = expand_path_to_list(input_, suffix=FASTQ_EXTENSIONS)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
     run(
@@ -83,7 +83,7 @@ def assign_probes(
 ):
     """Run the cutadapt step of the pipeline."""
     # Expand patterns to actual file paths
-    file_paths = expand_path_to_list(input_)
+    file_paths = expand_path_to_list(input_, suffix=FASTQ_EXTENSIONS)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
     run(
@@ -107,7 +107,7 @@ def map_(
         list[str],
         Parameter(
             consume_multiple=True,
-            help="File path, glob pattern, or list of file paths for R1 FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) or BAM/SAM files.",
+            help="File path, glob pattern, or list of file paths for R1 FASTQ or BAM/SAM files.",
         ),
     ],
     output_bam: Annotated[str, Parameter(help="Output directory for BAM files")],
@@ -145,6 +145,13 @@ def map_(
             help="Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded).",
         ),
     ] = 0,
+    allow_overlap: Annotated[
+        bool,
+        Parameter(
+            "--allow-overlap",
+            help="Allow reads to be assigned to overlapping features. When enabled, passes -O and --fraction to featureCounts.",
+        ),
+    ] = False,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
     delete: Annotated[
         bool, Parameter(help="Delete input files after processing")
@@ -152,7 +159,7 @@ def map_(
 ):
     """Run the mapping step of the pipeline. Supports both FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) and BAM/SAM inputs. For FASTQ files, includes read filtering to remove short reads (primer dimers) and STAR alignment. For BAM/SAM files, skips alignment and goes directly to featureCounts."""
     # Expand patterns to actual file paths
-    file_paths = expand_path_to_list(input_)
+    file_paths = expand_path_to_list(input_, suffix=FASTQ_EXTENSIONS + BAM_EXTENSIONS)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
     run(
@@ -167,6 +174,7 @@ def map_(
             str(skip),
             str(delete),
             str(strand),
+            str(allow_overlap),
         ),
     )
 
@@ -187,7 +195,7 @@ def count(
 ):
     """Run the counting step of the pipeline."""
     # Expand patterns to actual file paths
-    file_paths = expand_path_to_list(input_)
+    file_paths = expand_path_to_list(input_, suffix=BAM_EXTENSIONS)
     # Convert list to space-separated string for shell script
     input_patterns = " ".join(file_paths)
     run("foli_04_count.sh", (input_patterns, output_dir, str(cores), str(skip)))

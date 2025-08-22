@@ -82,6 +82,9 @@ foli map --input "/path/to/umi_tagged/*_1.fq.gz" --output-bam "/path/to/mapped_r
 
 This command performs streamlined alignment and feature counting using `STAR` and `featureCounts`. This step filters out short reads (< 60bp, considered primer dimers) using `cutadapt`, aligns filtered reads to the genome using `STAR`, and assigns reads to genomic features using `featureCounts`.
 
+**Optional parameters:**
+- `--allow-overlap`: Allow reads to be assigned to overlapping features. When enabled, passes `-O` and `--fraction` flags to `featureCounts` for fractional counting of overlapping features.
+
 UMI sequences and cell barcodes are added to BAM records as tags (`US` for raw UMI, `UC` for filtered UMI, `CB` for cell barcode) for the next counting step.
 
 Output files:

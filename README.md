@@ -41,7 +41,9 @@ Output directories are automatically created if they don't exist.
 ### Step 1. Preprocessing
 
 ```bash
-foli qc --input "/path/to/fastq/*_R1_*.fastq.gz" --output-dir "/path/to/trimmed_reads"
+foli qc \
+    --input "/path/to/fastq/*_R1_*.fastq.gz" \
+    --output-dir "/path/to/trimmed_reads"
 ```
 
 This command performs read trimming using `fastp` and runs quality check on output files with `fastqc` and `seqkit`.
@@ -56,7 +58,11 @@ Output files:
 ### Step 2. Probe assignment
 
 ```bash
-foli assign-probes --input "/path/to/trimmed_reads/*_1.fq.gz" --output-dir "/path/to/umi_tagged" --i5 /path/to/i5_short.fasta --i7 /path/to/i7_short.fasta
+foli assign-probes \
+    --input "/path/to/trimmed_reads/*_1.fq.gz" \
+    --output-dir "/path/to/umi_tagged" \
+    --i5 /path/to/i5_short.fasta \
+    --i7 /path/to/i7_short.fasta
 ```
 
 This command performs gene probe primer assignment and trimming using `cutadapt`. This step extracts UMI sequences from adapter matches and embeds them in read names for downstream processing. Quality statistics are also generated for the output files using `seqkit`.
@@ -64,7 +70,9 @@ This command performs gene probe primer assignment and trimming using `cutadapt`
 After probe assignment, you can get read statistics:
 
 ```bash
-foli get-read-stats --input "/path/to/umi_tagged/*_1.fq.gz" --output-dir "/path/to/read_stats"
+foli get-read-stats \
+    --input "/path/to/umi_tagged/*_1.fq.gz" \
+    --output-dir "/path/to/read_stats"
 ```
 
 This analyzes the UMI-tagged reads to generate detailed statistics about primer assignment and read characteristics.
@@ -77,13 +85,27 @@ Output files:
 ### Step 3. Mapping and Feature Counting
 
 ```bash
-foli map --input "/path/to/umi_tagged/*_1.fq.gz" --output-bam "/path/to/mapped_reads" --output-star "/path/to/star" --star-index /path/to/star_index --gtf /path/to/annotation.gtf
+foli map \
+    --input "/path/to/umi_tagged/*_1.fq.gz" \
+    --output-bam "/path/to/mapped_reads" \
+    --output-star "/path/to/star" \
+    --star-index /path/to/star_index \
+    --gtf /path/to/annotation.gtf
 ```
 
 This command performs streamlined alignment and feature counting using `STAR` and `featureCounts`. This step filters out short reads (< 60bp, considered primer dimers) using `cutadapt`, aligns filtered reads to the genome using `STAR`, and assigns reads to genomic features using `featureCounts`.
 
-**Optional parameters:**
-- `--allow-overlap`: Allow reads to be assigned to overlapping features. When enabled, passes `-O` and `--fraction` flags to `featureCounts` for fractional counting of overlapping features.
+For fractional counting of reads that overlap multiple features, you can use the `--allow-overlap` and `--allow-multimapping` flags:
+```bash
+foli map \
+    --input "/path/to/umi_tagged/*_1.fq.gz" \
+    --output-bam "/path/to/mapped_reads" \
+    --output-star "/path/to/star" \
+    --star-index /path/to/star_index \
+    --gtf /path/to/annotation.gtf \
+    --allow-overlap \
+    --allow-multimapping
+```
 
 UMI sequences and cell barcodes are added to BAM records as tags (`US` for raw UMI, `UC` for filtered UMI, `CB` for cell barcode) for the next counting step.
 
@@ -95,7 +117,9 @@ Output files:
 ### Step 4. UMI-based Gene Counting
 
 ```bash
-foli count --input "/path/to/mapped_reads/*.sorted.bam" --output-dir "/path/to/count_results"
+foli count \
+    --input "/path/to/mapped_reads/*.sorted.bam" \
+    --output-dir "/path/to/count_results"
 ```
 
 This command processes BAM files using `umi_tools group` to generate UMI-deduplicated count data. This step:
@@ -109,7 +133,10 @@ Input BAM files should contain UMI tags (`UC`), cell tags (`CB`), and gene assig
 After counting, generate the final count matrix:
 
 ```bash
-foli get-count-mtx --input "/path/to/count_results/*.group.tsv.gz" --output "/path/to/final_counts.tsv" --gtf /path/to/annotation.gtf
+foli get-count-mtx \
+    --input "/path/to/count_results/*.group.tsv.gz" \
+    --output "/path/to/final_counts.tsv" \
+    --gtf /path/to/annotation.gtf
 ```
 
 You can also use the Python function directly:
@@ -135,10 +162,16 @@ The primer selection workflow provides a complete pipeline for primer design:
 
 ```bash
 # Run complete primer design workflow using built-in reference
-foli-primer workflow --genes genes.tsv --species mouse --output-dir primer_design/
+foli-primer workflow \
+    --genes genes.tsv \
+    --species mouse \
+    --output-dir primer_design/
 
 # Or use custom transcriptome FASTA for better coverage
-foli-primer workflow --genes genes.tsv --txome-fasta /path/to/transcriptome.fasta --output-dir primer_design/
+foli-primer workflow \
+    --genes genes.tsv \
+    --txome-fasta /path/to/transcriptome.fasta \
+    --output-dir primer_design/
 ```
 
 **Input**: Gene table TSV with columns `gene` and `group`  
@@ -152,22 +185,31 @@ The recover functionality helps validate and analyze primer sets from IDT order 
 
 ```bash
 # Recover primer information using built-in reference
-foli-primer recover --order-excel idt_order.xlsx --output-dir recovered_output/ --species human
+foli-primer recover \
+    --order-excel idt_order.xlsx \
+    --output-dir recovered_output/ \
+    --species human
 
 # Or use custom transcriptome FASTA (recommended for better coverage)
-foli-primer recover --order-excel idt_order.xlsx --output-dir recovered_output/ --txome-fasta /path/to/transcriptome.fasta
+foli-primer recover \
+    --order-excel idt_order.xlsx \
+    --output-dir recovered_output/ \
+    --txome-fasta /path/to/transcriptome.fasta
 ```
 
 This command analyzes primer sequences from an IDT order file, validates them against a reference transcriptome, and generates output files for downstream analysis.
 
 **Note**: Using `--txome-fasta` with a custom transcriptome file is recommended over the built-in `--species` references as it typically provides better gene coverage than the packaged Gencode references.
 
-**Optional parameters:**
-- `--txome-fasta`: Use custom transcriptome FASTA instead of packaged reference (recommended)
-- `--species`: Use built-in transcriptome ("mouse" or "human")  
-- `--has-linker`: Include if primers contain linker sequences
-- `--amplicon-length-range`: Target amplicon length range (default: 320-380bp)
-- `--cores`: Number of cores for sequence alignment
+You can also specify the amplicon length range, and whether the primers have linkers:
+```bash
+foli-primer recover \
+    --order-excel idt_order.xlsx \
+    --output-dir recovered_output/ \
+    --txome-fasta /path/to/transcriptome.fasta \
+    --has-linker \
+    --amplicon-length-range 300 400
+```
 
 **Input**: IDT order Excel file with primer sequences  
 **Output**: 
@@ -216,5 +258,3 @@ pytest --cov=src/folitools --cov-report=html
 ## TODO
 
 - Add QC report code that summarizes all metrics into a table (need refactoring)
-- Add probe set design code
-- Primer set evaluation (fasta recover and primer dimer)

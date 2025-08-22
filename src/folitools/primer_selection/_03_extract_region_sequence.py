@@ -128,7 +128,7 @@ def product(
     output_fasta: Path,
     species: Literal["mouse", "human"] | None = None,
     reference: Path | None = None,
-) -> int:
+) -> list[SeqRecord]:
     """Extract and save selected regions to a FASTA file.
 
     Args:
@@ -138,7 +138,7 @@ def product(
         reference_fasta: Transcript FASTA (plain or gzipped).
 
     Returns:
-        Exit code 0 on success.
+        List of SeqRecord objects containing the extracted amplicon sequences.
     """
     selected_df = _coerce_selected_columns(pd.read_csv(selected_tsv, sep="\t"))
 
@@ -213,4 +213,6 @@ def product(
 
     print(f"\nSummary: {success} successful extractions, {errors} errors")
     print(f"Output written to: {output_fasta}")
-    return 0
+    
+    # Return the most important object: the list of SeqRecord objects
+    return records

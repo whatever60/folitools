@@ -82,13 +82,15 @@ def subset(
     Returns:
         Process exit code.
     """
-    return _subset(
+    _ = _subset(
         species=species,
         amplicon_size_range=amplicon_size_range,
         gene_table_file=input_,
         output_primer_sequence=output_primer_sequence,
         output_primer_info=output_primer_info,
     )
+    # _subset now returns a dict with DataFrames, so we return 0 for success
+    return 0
 
 
 @app.command
@@ -114,7 +116,7 @@ def saddle(
     Returns:
         Process exit code.
     """
-    return _saddle(
+    _ = _saddle(
         input_=input_,
         output=output,
         output_loss=output_loss,
@@ -122,6 +124,7 @@ def saddle(
         random_seed=random_seed,
         background_fasta=background_fasta,
     )
+    return 0
 
 
 @app.command
@@ -145,14 +148,14 @@ def product(
     Returns:
         Process exit code.
     """
-
-    return _product(
+    _ = _product(
         selected_tsv=input_,
         primer_info_tsv=primer_info,
         output_fasta=output_fasta,
         species=species,
         reference=reference,
     )
+    return 0
 
 
 @app.command
@@ -180,7 +183,7 @@ def summary(
     Returns:
         Process exit code.
     """
-    _summary(
+    _ = _summary(
         str(input_),
         str(primer_selection),
         str(primer_info),
@@ -224,7 +227,7 @@ def recover(
     output_i5 = output_dir / "i5_short.fasta"
     output_i7 = output_dir / "i7_short.fasta"
 
-    _recover(
+    _ = _recover(
         order_excel=order_excel,
         txome_fasta=txome_fasta,
         species=species,
@@ -236,8 +239,6 @@ def recover(
         amplicon_length_range=amplicon_length_range,
         threads=threads,
     )
-
-    print(f"Recovered files written to: {output_dir}")
     return 0
 
 
@@ -273,20 +274,18 @@ def workflow(
     # 1) subset
     primer_seq = output_dir / "primer_sequence.tsv"
     primer_info = output_dir / "primer_info.tsv"
-    rc1 = _subset(
+    _ = _subset(
         gene_table_file=input_,
         species=species,
         amplicon_size_range=amplicon_size_range,
         output_primer_sequence=primer_seq,
         output_primer_info=primer_info,
     )
-    if rc1 != 0:
-        return rc1
 
     # 2) saddle
     selected_tsv = output_dir / "primer_sequence_selected.tsv"
     loss_tsv = output_dir / "primer_sequence_selected_loss.txt"
-    rc2 = saddle(
+    _ = saddle(
         input_=primer_seq,
         output=selected_tsv,
         output_loss=loss_tsv,
@@ -294,20 +293,16 @@ def workflow(
         random_seed=random_seed,
         background_fasta=background_fasta,
     )
-    if rc2 != 0:
-        return rc2
 
     # 3) product
     region_fa = output_dir / "amplicons.fasta"
-    rc3 = _product(
+    _ = _product(
         selected_tsv=selected_tsv,
         primer_info_tsv=primer_info,
         output_fasta=region_fa,
         species=species,
         reference=reference,
     )
-    if rc3 != 0:
-        return rc3
 
     # 4) summary (Excel output)
     excel_out = output_dir / "primer_to_order.xlsx"

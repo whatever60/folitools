@@ -431,7 +431,7 @@ def saddle(
     tolerance_factor: float = 1e6,
     reanneal_fraction: float = 0.5,
     background_fasta: Path | None = None,
-) -> int:
+) -> pd.DataFrame:
     """Run simulated annealing to choose a low-dimer primer set.
 
     Args:
@@ -445,11 +445,11 @@ def saddle(
         p3_dist_max: Max 3' offset considered (default: 2).
         tolerance_factor: SA acceptance scale (default: 1_000_000.0).
         reanneal_fraction: Fraction of cycles for greedy re-anneal (default: 0.5).
-        background_fasta: Optional FASTA file with additional primer sequences to include 
+        background_fasta: Optional FASTA file with additional primer sequences to include
                          in interaction calculations as fixed background primers.
 
     Returns:
-        Exit code 0 on success.
+        DataFrame with selected primer pairs.
     """
     random.seed(random_seed)
 
@@ -457,12 +457,12 @@ def saddle(
     print("Start!")
 
     primer_info_pool, primers = load_primer_data(input_)
-    
+
     # Add background primers if provided
     if background_fasta is not None:
         background_seqs = read_fasta(background_fasta)
         primers.extend(list(background_seqs.values()))
-    
+
     genes = list(primer_info_pool.keys())
 
     gene_total_design_list = [list(range(len(primer_info_pool[g]))) for g in genes]
@@ -577,4 +577,5 @@ def saddle(
     print(f"  - Final primers: {output} ({len(results_df)} records)")
     print(f"  - SADDLE loss: {output_loss} ({len(loss_df)} values)")
 
-    return 0
+    # Return the most important object: the selected primers DataFrame
+    return results_df

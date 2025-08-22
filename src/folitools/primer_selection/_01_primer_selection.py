@@ -229,7 +229,7 @@ def subset(
     amplicon_size_range: tuple[int, int],
     output_primer_sequence: Path,
     output_primer_info: Path,
-) -> int:
+) -> pd.DataFrame:
     """Run the subset operation end-to-end.
 
     Args:
@@ -241,7 +241,7 @@ def subset(
         output_primer_info: Path to write primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
 
     Returns:
-        Exit code: 0 on success.
+        DataFrame containing the filtered primer info data.
 
     Raises:
         FileNotFoundError: If required packaged Parquet files are missing.
@@ -314,4 +314,6 @@ def subset(
     print(f"Wrote: {output_primer_info}")
     # print(f"Wrote: {out_tx}")
     print("Subset complete.")
-    return 0
+    
+    # Return the most important object: the primer_info_df
+    return info_f

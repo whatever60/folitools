@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
-from matplotlib_venn import venn2
 
 
 def make_report(

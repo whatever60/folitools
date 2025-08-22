@@ -694,9 +694,9 @@ def _sanity_check_primer_pair_relationships(grouped: pd.DataFrame) -> None:
     else:
         logger.warning("⚠️ Some primers are reused in multiple pairs:")
         if fwd_max > 1:
-            logger.warning("  - A forward primer is used up to %d times.", fwd_max)
+            logger.warning("  - Forward primers are used up to %d times.", fwd_max)
         if rev_max > 1:
-            logger.warning("  - A reverse primer is used up to %d times.", rev_max)
+            logger.warning("  - Reverse primers are used up to %d times.", rev_max)
 
 
 def recover(

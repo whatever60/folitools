@@ -6,7 +6,7 @@ source "$script_dir/utils.sh"
 
 # Help function
 show_help() {
-    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete] [strand] [allow_overlap]"
+    echo "Usage: $0 <input_files> <output_bam_dir> <output_star_dir> <star_index> <gtf_file> [threads] [skip] [delete] [strand] [allow_overlap] [allow_multimapping]"
     echo "  input_files    : Space-separated list of R1 FASTQ (.fq/.fastq/.fq.gz/.fastq.gz) or BAM/SAM file paths"
     echo "  output_bam_dir : Output directory for BAM files"
     echo "  output_star_dir: Output directory for STAR files (required if any FASTQ inputs)"
@@ -17,6 +17,7 @@ show_help() {
     echo "  delete         : Delete input files after processing (default: false)"
     echo "  strand         : Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded) (default: 0)"
     echo "  allow_overlap  : Allow reads to be assigned to overlapping features (default: false)"
+    echo "  allow_multimapping : Allow multi-mapping reads to be counted (default: false)"
     echo "  -h, --help     : Show this help message"
     exit 0
 }
@@ -37,6 +38,7 @@ SKIP="${7:-0}"
 DELETE="${8:-false}"
 STRAND="${9:-0}"
 ALLOW_OVERLAP="${10:-false}"
+ALLOW_MULTIMAPPING="${11:-false}"
 
 if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$GTF_PATH" ]]; then
     show_help
@@ -319,7 +321,17 @@ for input_file in "${input_files[@]}"; do
         
         # Add overlap flags if allow_overlap is true
         if [[ "$ALLOW_OVERLAP" == "True" ]]; then
-            FEATURECOUNTS_CMD="$FEATURECOUNTS_CMD -O --fraction"
+            FEATURECOUNTS_CMD="$FEATURECOUNTS_CMD -O"
+        fi
+
+        # Add multimapping flags if allow_multimapping is true
+        if [[ "$ALLOW_MULTIMAPPING" == "True" ]]; then
+            FEATURECOUNTS_CMD="$FEATURECOUNTS_CMD -M"
+        fi
+
+        # Add fraction flag if either overlap or multimapping is true
+        if [[ "$ALLOW_OVERLAP" == "True" || "$ALLOW_MULTIMAPPING" == "True" ]]; then
+            FEATURECOUNTS_CMD="$FEATURECOUNTS_CMD --fraction"
         fi
         
         FEATURECOUNTS_CMD="$FEATURECOUNTS_CMD $star_bam"

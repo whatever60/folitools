@@ -152,6 +152,13 @@ def map_(
             help="Allow reads to be assigned to overlapping features. When enabled, passes -O and --fraction to featureCounts.",
         ),
     ] = False,
+    allow_multimapping: Annotated[
+        bool,
+        Parameter(
+            "--allow-multimapping",
+            help="Allow multi-mapping reads to be counted. When enabled, passes -M and --fraction to featureCounts.",
+        ),
+    ] = False,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
     delete: Annotated[
         bool, Parameter(help="Delete input files after processing")
@@ -175,6 +182,7 @@ def map_(
             str(delete),
             str(strand),
             str(allow_overlap),
+            str(allow_multimapping),
         ),
     )
 

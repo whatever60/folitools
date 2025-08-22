@@ -104,21 +104,21 @@ echo
 echo "Testing foli_03_map.sh validation..."
 
 # Test with mixed files - should accept them but require STAR params for FASTQ
-if bash /home/ubuntu/dev/folitools/src/folitools/scripts/foli_03_map.sh "$TEST_DIR/sample1_1.fq.gz $TEST_DIR/sample5.bam" "$TEST_DIR/out3_bam" "" "" "$TEST_DIR/dummy.gtf" 1 0 false 0 false 2>&1 | grep -q "ERROR.*output_star_dir and star_index are required"; then
+if bash /home/ubuntu/dev/folitools/src/folitools/scripts/foli_03_map.sh "$TEST_DIR/sample1_1.fq.gz $TEST_DIR/sample5.bam" "$TEST_DIR/out3_bam" "" "" "$TEST_DIR/dummy.gtf" 1 0 false 0 false false 2>&1 | grep -q "ERROR.*output_star_dir and star_index are required"; then
     test_result "foli_03_map.sh: correctly requires STAR params for FASTQ input" "true"
 else
     test_result "foli_03_map.sh: correctly requires STAR params for FASTQ input" "false"
 fi
 
 # Test with only BAM files - should not require STAR params
-if bash /home/ubuntu/dev/folitools/src/folitools/scripts/foli_03_map.sh "$TEST_DIR/sample5.bam" "$TEST_DIR/out3_bam" "" "" "$TEST_DIR/dummy.gtf" 1 0 false 0 false 2>&1 | grep -q "Input analysis"; then
+if bash /home/ubuntu/dev/folitools/src/folitools/scripts/foli_03_map.sh "$TEST_DIR/sample5.bam" "$TEST_DIR/out3_bam" "" "" "$TEST_DIR/dummy.gtf" 1 0 false 0 false false 2>&1 | grep -q "Input analysis"; then
     test_result "foli_03_map.sh: accepts BAM-only input without STAR params" "true"
 else
     test_result "foli_03_map.sh: accepts BAM-only input without STAR params" "false"
 fi
 
 # Test unsupported file format
-if bash /home/ubuntu/dev/folitools/src/folitools/scripts/foli_03_map.sh "$TEST_DIR/dummy.gtf" "$TEST_DIR/out3_bam" "" "" "$TEST_DIR/dummy.gtf" 1 0 false 0 false 2>&1 | grep -q "ERROR.*Unsupported file format"; then
+if bash /home/ubuntu/dev/folitools/src/folitools/scripts/foli_03_map.sh "$TEST_DIR/dummy.gtf" "$TEST_DIR/out3_bam" "" "" "$TEST_DIR/dummy.gtf" 1 0 false 0 false false 2>&1 | grep -q "ERROR.*Unsupported file format"; then
     test_result "foli_03_map.sh: correctly rejects unsupported file formats" "true"
 else
     test_result "foli_03_map.sh: correctly rejects unsupported file formats" "false"

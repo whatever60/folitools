@@ -18,9 +18,13 @@ from .recover_plot import make_report
 from .utils import get_prefixes, resolve_reference_path
 from .recover_utils import simplify_gene_list
 
-__all__ = ["recover"]
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)  # Need both logger level and handler level to work
+logger.propagate = False
+logger.addHandler(handler)
 
 
 def _read_idt_excel(order_excel: Path, robust: bool = True) -> pd.DataFrame:
@@ -147,7 +151,7 @@ def _run_seqkit_locate(
         args.extend(["--pattern", p])
     args.extend(["--threads", str(t), str(ref_fasta)])
 
-    logger.info("Running: %s", " ".join(args))
+    # logger.info("Running: %s", " ".join(args))
     proc = subprocess.run(args, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"seqkit locate failed: {proc.stderr}")
@@ -182,8 +186,7 @@ def _enrich_locate_df(
     df["gene_symbol"] = parts[5] if parts.shape[1] > 5 else parts[0]
 
     merged = pd.merge(df, primer_info, how="left", on="primer_seq")
-    missing = merged[merged["pool"].isna()]
-    if not missing.empty:
+    if merged["pool"].isna().any():
         raise RuntimeError(
             "Internal error: locate patterns didn't map back to primers."
         )
@@ -428,44 +431,38 @@ def _build_summary_df(
     return df_out[cols].copy()
 
 
-def _sanity_check_primer_duplicates(primer_info: pd.DataFrame) -> None:
-    """Sanity check: primer gene-specific sequences should be unique"""
-    dup_counts = primer_info["primer_seq"].value_counts()
-    dups = dup_counts[dup_counts > 1]
-    if not dups.empty:
-        logger.warning("Duplicate primer gene-specific sequences detected:")
-        for seq, count in dups.items():
-            logger.warning("  Sequence '%s' appeared %d times", seq, count)
-
-
-def _sanity_check_sequence_uniqueness(primer_seqs: list[str]) -> None:
+def _sanity_check_primer_duplicates(primer_seqs: list[str]) -> None:
     """Sanity check: Are primer sequences unique?"""
     vc = pd.Series(primer_seqs).value_counts()
     duplicated_primers = vc[vc > 1]
     if not duplicated_primers.empty:
-        logger.info(
-            "Sanity check - ⚠️ Duplicate primer sequences found (sequence -> count):"
+        logger.warning(
+            "⚠️ %d duplicate primer sequences found (Top 10):", len(duplicated_primers)
         )
-        for seq, count in duplicated_primers.items():
-            logger.info("  %s: %d occurrences", seq, count)
+        for seq, count in duplicated_primers.head(10).items():
+            logger.warning("  - %s: %d occurrences", seq, count)
+        if len(duplicated_primers) > 10:
+            logger.warning(
+                "  ... and %d more duplicate sequences.", len(duplicated_primers) - 10
+            )
     else:
-        logger.info("Sanity check - ✅ All primer sequences are unique")
+        logger.info("✅ All primer sequences are unique.")
 
 
 def _sanity_check_seqkit_patterns(locate_df: pd.DataFrame) -> None:
     """Sanity check: Number of matches in the transcriptome for each primer. We could
     see some primers have thousands of matches.
     """
-    vc = pd.Series(locate_df["pattern"]).value_counts()
-    duplicated_patterns = vc[vc > 1]
-    if not duplicated_patterns.empty:
-        logger.info(
-            "Sanity check - ⚠️ Duplicate patterns found in seqkit locate output (pattern -> count):"
-        )
-        for pattern, count in duplicated_patterns.items():
-            logger.info("  %s: %d occurrences", pattern, count)
-    else:
-        logger.info("Sanity check - ✅ All seqkit locate patterns are unique")
+    vc = locate_df["pattern"].value_counts()
+    if vc.empty:
+        logger.info("✅ No seqkit patterns to check.")
+        return
+
+    logger.info("✅ Sanity check: `seqkit locate` pattern counts (Top 10):")
+    for pattern, count in vc.head(10).items():
+        logger.info("  - %s: %d matches", pattern, count)
+    if len(vc) > 10:
+        logger.info("  ... and %d more patterns.", len(vc) - 10)
 
 
 def _sanity_check_multi_location_binding(locate_df_final: pd.DataFrame) -> None:
@@ -473,139 +470,179 @@ def _sanity_check_multi_location_binding(locate_df_final: pd.DataFrame) -> None:
     a primer sequence can bind to multiple locations on the same transcript if the
     transcript sequence is repetitive.
     """
-    logger.info(
-        "Sanity check - Checking for primers binding to multiple locations on the same transcript:"
-    )
-    multi_location_count = 0
-    for (primer_seq, transcript_id), group in locate_df_final.groupby(
-        ["primer_seq", "transcript_id"]
-    ):
-        if len(group) > 1:
-            multi_location_count += 1
-            logger.info(
-                "  Primer %s binds to %d locations on transcript %s",
+    binding_counts = locate_df_final.groupby(["primer_seq", "transcript_id"]).size()
+    multi_bindings = binding_counts[binding_counts > 1].sort_values(ascending=False)
+
+    if multi_bindings.empty:
+        logger.info("✅ No primers bind to multiple locations on the same transcript.")
+    else:
+        logger.warning(
+            "⚠️ Found %d instances of primers binding to multiple locations on the same transcript (Top 10 shown):",
+            len(multi_bindings),
+        )
+        for (primer_seq, transcript_id), count in multi_bindings.head(10).items():
+            logger.warning(
+                "  - Primer %s binds to %d locations on transcript %s",
                 primer_seq,
-                len(group),
+                count,
                 transcript_id,
             )
-    if multi_location_count == 0:
-        logger.info("  ✅ No primers bind to multiple locations on the same transcript")
+        if len(multi_bindings) > 10:
+            logger.warning(
+                "  ... and %d more multi-location binding instances.",
+                len(multi_bindings) - 10,
+            )
 
 
 def _sanity_check_multi_gene_binding(locate_df_final: pd.DataFrame) -> None:
     """Sanity check: Ideally, a primer_seq matches to one gene_id only. In reality, a
     primer sequence could bind to multiple locations on multiple transcripts of the same gene.
     """
-    logger.info("Sanity check - Checking for primers binding to multiple genes:")
-    multi_gene_count = 0
-    for primer_seq, group in locate_df_final.groupby("primer_seq"):
-        gene_ids = group["gene_id"].unique()
-        if len(gene_ids) > 1:
-            multi_gene_count += 1
-            logger.info(
-                "  Primer %s binds to %d different genes: %s",
+    gene_counts = locate_df_final.groupby("primer_seq")["gene_id"].nunique()
+    multi_gene_bindings = gene_counts[gene_counts > 1].sort_values(ascending=False)
+
+    if multi_gene_bindings.empty:
+        logger.info("✅ All primers bind to a single gene.")
+    else:
+        logger.warning(
+            "⚠️ Found %d primers binding to multiple genes (Top 10 shown):",
+            len(multi_gene_bindings),
+        )
+        for primer_seq, num_genes in multi_gene_bindings.head(10).items():
+            genes = locate_df_final[locate_df_final["primer_seq"] == primer_seq][
+                "gene_id"
+            ].unique()
+            # genes_str = ", ".join(genes[:5])
+            if len(genes) > 5:
+                genes = genes[:5].tolist() + [f"... and {len(genes) - 5} more genes"]
+            else:
+                genes = genes.tolist()
+            logger.warning(
+                "  - Primer %s binds to %d genes: %s",
                 primer_seq,
-                len(gene_ids),
-                ", ".join(gene_ids),
+                num_genes,
+                ", ".join(genes),
             )
-    if multi_gene_count == 0:
-        logger.info("  ✅ All primers bind to only one gene each")
+        if len(multi_gene_bindings) > 10:
+            logger.warning(
+                "  ... and %d more multi-gene binding primers.",
+                len(multi_gene_bindings) - 10,
+            )
 
 
 def _sanity_check_sequence_lengths(locate_df_final: pd.DataFrame) -> None:
     """Sanity check: All primer sequences match their lengths."""
-    logger.info(
-        "Sanity check - Verifying primer sequence lengths match locate results:"
-    )
-    length_matches = (
+    mismatches = locate_df_final[
         (locate_df_final["end"] - locate_df_final["start"] + 1)
-        == locate_df_final["primer_seq"].str.len()
-    ).all()
-    if length_matches:
-        logger.info("  ✅ All primer sequence lengths match their locate positions")
-    else:  # If there is abnormal length, it is an error
+        != locate_df_final["primer_seq"].str.len()
+    ]
+    if mismatches.empty:
+        logger.info("✅ All primer sequence lengths match their locate positions.")
+    else:
+        logger.error(
+            f"❌ {len(mismatches)} primers have length mismatches in locate results!"
+        )
         raise ValueError(
-            "  ⚠️ Some primer sequence lengths do not match their locate positions!"
+            f"{len(mismatches)} primers have length mismatches in locate results!"
         )
 
 
 def _sanity_check_genes_per_primer_pair(amplicon_sub: pd.DataFrame) -> None:
     """Sanity check: Check the number of genes amplified by each primer pair."""
-    logger.info("Sanity check - Analyzing genes amplified per primer pair:")
+    if amplicon_sub.empty:
+        logger.info("✅ No amplicons to analyze for gene specificity.")
+        return
+
     genes_per_pair = amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"])[
         "gene_id"
     ].nunique()
-    gene_count_distribution = genes_per_pair.value_counts()
-    if not gene_count_distribution.empty:
-        logger.info("  Distribution of gene counts per primer pair:")
-        for gene_count, pair_count in gene_count_distribution.items():
-            logger.info("    %d gene(s): %d primer pairs", gene_count, pair_count)
+    multi_gene_pairs = genes_per_pair[genes_per_pair > 1].sort_values(ascending=False)
+
+    if multi_gene_pairs.empty:
+        logger.info("✅ All primer pairs amplify a single gene.")
     else:
-        logger.info("  No primer pairs found")
+        logger.warning(
+            "⚠️ %d primer pairs amplify more than one gene (Top 10 shown):",
+            len(multi_gene_pairs),
+        )
+        for (fwd, rev), count in multi_gene_pairs.head(10).items():
+            logger.warning("  - %s/%s: %d genes", fwd, rev, count)
+        if len(multi_gene_pairs) > 10:
+            logger.warning(
+                "  ... and %d more multi-gene pairs.", len(multi_gene_pairs) - 10
+            )
 
 
 def _sanity_check_amplicons_per_pair(amplicon_sub: pd.DataFrame) -> None:
     """Sanity check: Number of amplicons formed by each primer pair."""
-    logger.info("Sanity check - Analyzing amplicons formed per primer pair:")
+    if amplicon_sub.empty:
+        logger.info("✅ No amplicons to analyze.")
+        return
+
     amplicons_per_pair = amplicon_sub.groupby(
         ["primer_seq_fwd", "primer_seq_rev"]
     ).size()
-    if not amplicons_per_pair.empty:
-        logger.info("  Amplicon counts per primer pair:")
-        for i, ((fwd, rev), count) in enumerate(amplicons_per_pair.head(10).items()):
-            logger.info("    Pair %d: %d amplicons", i + 1, count)
-        if len(amplicons_per_pair) > 10:
-            logger.info(
-                "    ... and %d more primer pairs", len(amplicons_per_pair) - 10
-            )
-        logger.info(
-            "  Summary: min=%d, max=%d amplicons per pair",
-            amplicons_per_pair.min(),
-            amplicons_per_pair.max(),
-        )
+    multi_amplicons = amplicons_per_pair[amplicons_per_pair > 1].sort_values(
+        ascending=False
+    )
+
+    if multi_amplicons.empty:
+        logger.info("✅ All primer pairs form a single amplicon.")
     else:
-        logger.info("  No amplicons found")
+        logger.warning(
+            "⚠️ %d primer pairs form multiple amplicons (Top 10 shown):",
+            len(multi_amplicons),
+        )
+        for (fwd, rev), count in multi_amplicons.head(10).items():
+            logger.warning("  - %s/%s: %d amplicons", fwd, rev, count)
+        if len(multi_amplicons) > 10:
+            logger.warning(
+                "  ... and %d more multi-amplicon pairs.", len(multi_amplicons) - 10
+            )
 
 
 def _sanity_check_cross_pool_amplicons(amplicon_sub: pd.DataFrame) -> None:
     """Sanity check: Cross-pool amplicon (i.e., the two primers of the amplicon are in
     different pools)
     """
-    logger.info("Sanity check - Checking for cross-pool amplicons:")
-    same_pool_ratio = (amplicon_sub["pool_fwd"] == amplicon_sub["pool_rev"]).mean()
-    total_amplicons = len(amplicon_sub)
-    same_pool_count = int(same_pool_ratio * total_amplicons)
-    cross_pool_count = total_amplicons - same_pool_count
-    logger.info("  Total amplicons: %d", total_amplicons)
-    logger.info(
-        "  Same pool (both primers): %d (%.1f%%)",
-        same_pool_count,
-        same_pool_ratio * 100,
-    )
-    logger.info(
-        "  Cross pool (different pools): %d (%.1f%%)",
-        cross_pool_count,
-        (1 - same_pool_ratio) * 100,
-    )
+    if amplicon_sub.empty:
+        logger.info("✅ No amplicons to check for cross-pool formation.")
+        return
+
+    cross_pool_mask = amplicon_sub["pool_fwd"] != amplicon_sub["pool_rev"]
+    cross_pool_count = cross_pool_mask.sum()
+
+    if cross_pool_count == 0:
+        logger.info("✅ No cross-pool amplicons were formed.")
+    else:
+        logger.warning(
+            "⚠️ Found %d cross-pool amplicons (%.1f%% of total).",
+            cross_pool_count,
+            (cross_pool_count / len(amplicon_sub)) * 100,
+        )
 
 
 def _sanity_check_primer_pair_relationships(grouped: pd.DataFrame) -> None:
     """Sanity check: Ideally, it should be a one-to-one relation between forward and
     reverse primers.
     """
-    logger.info("Sanity check - Checking primer pair relationships:")
-    fwd_max_usage = (
-        grouped["primer_seq_fwd"].value_counts().max() if not grouped.empty else 0
-    )
-    rev_max_usage = (
-        grouped["primer_seq_rev"].value_counts().max() if not grouped.empty else 0
-    )
-    if fwd_max_usage <= 1 and rev_max_usage <= 1:
-        logger.info("  ✅ One-to-one primer relationships maintained")
+    if grouped.empty:
+        logger.info("✅ No primer pairs to analyze for relationships.")
+        return
+
+    fwd_counts = grouped["primer_seq_fwd"].value_counts()
+    rev_counts = grouped["primer_seq_rev"].value_counts()
+    fwd_max = fwd_counts.max()
+    rev_max = rev_counts.max()
+
+    if fwd_max <= 1 and rev_max <= 1:
+        logger.info("✅ One-to-one primer pair relationships maintained.")
     else:
-        logger.info("  ⚠️ Some primers are reused in multiple pairs")
-        logger.info("    Maximum times a forward primer is used: %d", fwd_max_usage)
-        logger.info("    Maximum times a reverse primer is used: %d", rev_max_usage)
+        logger.warning("⚠️ Some primers are reused in multiple pairs:")
+        if fwd_max > 1:
+            logger.warning("  - A forward primer is used up to %d times.", fwd_max)
+        if rev_max > 1:
+            logger.warning("  - A reverse primer is used up to %d times.", rev_max)
 
 
 def recover(
@@ -662,11 +699,22 @@ def recover(
     primer_info = _classify_primers(
         _read_idt_excel(order_excel), fwd_prefix, rev_prefix
     )
-    _sanity_check_primer_duplicates(primer_info)
 
     # Locate patterns in the transcriptome
-    primer_seqs = primer_info["primer_seq"].astype(str).str.upper().tolist()
-    _sanity_check_sequence_uniqueness(primer_seqs)
+    primer_seqs_fwd = (
+        primer_info.query("primer_type == 'fwd'")["primer_seq"]
+        .astype(str)
+        .str.upper()
+        .tolist()
+    )
+    primer_seqs_rev = (
+        primer_info.query("primer_type == 'rev'")["primer_seq"]
+        .astype(str)
+        .str.upper()
+        .tolist()
+    )
+    primer_seqs = primer_seqs_fwd + primer_seqs_rev
+    _sanity_check_primer_duplicates(primer_seqs)
 
     locate_df = _run_seqkit_locate(primer_seqs, ref_path, threads=threads)
     _sanity_check_seqkit_patterns(locate_df)
@@ -708,11 +756,19 @@ def recover(
         out_xlsx.parent.mkdir(parents=True, exist_ok=True)
         summary_df.to_excel(out_xlsx, index=False)
 
-    # i5/i7 short FASTAs
+    # Create SeqRecord lists for i5/i7 short FASTAs
+    i5_records = _create_fasta_records(
+        summary_df.set_index("L_seq")["multi_mapping"], primer_seqs_fwd
+    )
+    i7_records = _create_fasta_records(
+        summary_df.set_index("R_seq")["multi_mapping"], primer_seqs_rev
+    )
+
+    # Write i5/i7 short FASTAs if output paths are provided
     if output_i5 is not None:
-        _write_fasta(summary_df, "L_seq", str(output_i5))
+        SeqIO.write(i5_records, str(output_i5), "fasta")
     if output_i7 is not None:
-        _write_fasta(summary_df, "R_seq", str(output_i7))
+        SeqIO.write(i7_records, str(output_i7), "fasta")
 
     return summary_df
 
@@ -730,41 +786,52 @@ def collapse_to_id(series: pd.Series) -> str:
     return simplify_gene_list(rid)
 
 
-def _write_fasta(summary_df: pd.DataFrame, seq_col: str, output_path: str) -> None:
-    """Write i5/i7 *short* FASTAs from the recovered summary.
+def _create_fasta_records(
+    primer_mappings: pd.Series, seqs_all: list[str]
+) -> list[SeqRecord]:
+    """Create a list of SeqRecord objects from the summary DataFrame.
 
     The short sequences correspond to the display `L_seq`/`R_seq` columns in the
-    summary (i.e., the tail after NNNNNN plus the gene-specific portion),
-    mirroring the notebook behavior. FASTA record IDs are constructed from the
-    unique set of gene symbols in the `multi_mapping` column for each unique
-    `L_seq`/`R_seq`, joined by `|`. If an ID would collide, suffix with `.1`, `.2`, ...
+    summary. FASTA record IDs are constructed from the unique set of gene symbols
+    in the `multi_mapping` column for each unique sequence, joined by `|`.
+    If an ID would collide, a numeric suffix is added.
 
     Args:
-        summary_df: Final summary DataFrame from :func:`recover`.
-        output_i5: Destination path for the i5 short FASTA (forward). If None, skip.
-        output_i7: Destination path for the i7 short FASTA (reverse). If None, skip.
+        primer_mappings: A pandas Series with sequences as index (can have duplicates)
+                         and "multi_mapping" strings as values.
+        seqs_all: A list of all expected sequences ("L_seq" or "R_seq").
+
+    Returns:
+        A list of SeqRecord objects.
     """
-    out_path = Path(output_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Add missing sequences with _NA mapping
+    present_seqs = set(primer_mappings.index)
+    missing_seqs = [s for s in seqs_all if s not in present_seqs]
+    if missing_seqs:
+        missing_series = pd.Series("_NA|_NA|_NA", index=missing_seqs)
+        primer_mappings = pd.concat([primer_mappings, missing_series])
 
     # Collapse multi-mapping to a simplified record_id per unique sequence.
+    # Group by index (sequence) and apply collapse_to_id
     mapping_df = (
-        summary_df[[seq_col, "multi_mapping"]]
-        .groupby(seq_col, as_index=False)
-        .agg(record_id=("multi_mapping", collapse_to_id))
+        primer_mappings.groupby(primer_mappings.index)
+        .apply(collapse_to_id)
+        .reset_index()
     )
-    used_ids: set[str] = set()
+    mapping_df.columns = ["seq", "record_id"]
 
-    with open(out_path, "w") as handle:
-        for _, row in mapping_df.iterrows():
-            seq: str = str(row[seq_col]).upper()
-            rid: str = str(row["record_id"])
-            rid_final = rid
-            k = 1
-            while rid_final in used_ids:
-                rid_final = f"{rid}.{k}"
-                k += 1
-            used_ids.add(rid_final)
-            SeqIO.write(
-                SeqRecord(Seq(seq), id=rid_final, description=""), handle, "fasta"
-            )
+    used_ids: set[str] = set()
+    records: list[SeqRecord] = []
+
+    for _, row in mapping_df.iterrows():
+        seq: str = str(row["seq"]).upper()
+        rid: str = str(row["record_id"])
+        rid_final = rid
+        k = 1
+        while rid_final in used_ids:
+            rid_final = f"{rid}.{k}"
+            k += 1
+        used_ids.add(rid_final)
+        records.append(SeqRecord(Seq(seq), id=rid_final, description=""))
+
+    return records

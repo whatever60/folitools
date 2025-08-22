@@ -94,7 +94,7 @@ def test_idt_ordering():
 
     print("Running summary function with IDT ordering...")
     try:
-        summary(
+        result_df = summary(
             input_=gene_file,
             primer_selection=selection_file,
             primer_info=primer_info_file,
@@ -104,6 +104,8 @@ def test_idt_ordering():
             idt_pool_prefix="TEST_POOL",
         )
 
+        assert result_df is not None, "Summary should return a DataFrame"
+        assert not result_df.empty, "Summary should return non-empty DataFrame"
         print("✓ Summary function completed successfully")
 
         # Check if IDT file was created

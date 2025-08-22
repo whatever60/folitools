@@ -61,7 +61,7 @@ class TestIDTOrdering:
             output_idt = os.path.join(temp_dir, "idt_order.xlsx")
 
             # Run summary function
-            summary(
+            result_df = summary(
                 input_=gene_file,
                 primer_selection=selection_file,
                 primer_info=primer_info_file,
@@ -70,6 +70,9 @@ class TestIDTOrdering:
                 output_idt_order=output_idt,
                 idt_pool_prefix="TEST_POOL",
             )
+
+            assert result_df is not None, "Summary should return a DataFrame"
+            assert not result_df.empty, "Summary should return non-empty DataFrame"
 
             # Check that IDT file was created
             assert os.path.exists(output_idt), "IDT ordering file should be created"
@@ -115,7 +118,7 @@ class TestIDTOrdering:
             output_idt = os.path.join(temp_dir, "idt_order.xlsx")
 
             # Run summary function
-            summary(
+            result_df = summary(
                 input_=gene_file,
                 primer_selection=selection_file,
                 primer_info=primer_info_file,
@@ -124,6 +127,9 @@ class TestIDTOrdering:
                 output_idt_order=output_idt,
                 idt_pool_prefix="MULTI_POOL",
             )
+
+            assert result_df is not None, "Summary should return a DataFrame"
+            assert not result_df.empty, "Summary should return non-empty DataFrame"
 
             # Read IDT file
             idt_data = pd.read_excel(output_idt)
@@ -157,7 +163,7 @@ class TestIDTOrdering:
             output_excel = os.path.join(temp_dir, "summary.xlsx")
             output_idt = os.path.join(temp_dir, "idt_order.xlsx")
 
-            summary(
+            result_df = summary(
                 input_=gene_file,
                 primer_selection=selection_file,
                 primer_info=primer_info_file,
@@ -166,6 +172,9 @@ class TestIDTOrdering:
                 output_idt_order=output_idt,
                 idt_pool_prefix="EXACT_POOL",
             )
+
+            assert result_df is not None, "Summary should return a DataFrame"
+            assert not result_df.empty, "Summary should return non-empty DataFrame"
 
             idt_data = pd.read_excel(output_idt)
 
@@ -190,7 +199,7 @@ class TestIDTOrdering:
             output_excel = os.path.join(temp_dir, "summary.xlsx")
             output_idt = os.path.join(temp_dir, "idt_order.xlsx")
 
-            summary(
+            result_df = summary(
                 input_=gene_file,
                 primer_selection=selection_file,
                 primer_info=primer_info_file,
@@ -199,6 +208,9 @@ class TestIDTOrdering:
                 output_idt_order=output_idt,
                 idt_pool_prefix="LINKER_POOL",
             )
+
+            assert result_df is not None, "Summary should return a DataFrame"
+            assert not result_df.empty, "Summary should return non-empty DataFrame"
 
             idt_data = pd.read_excel(output_idt)
 
@@ -250,7 +262,7 @@ class TestIDTOrdering:
             output_excel = os.path.join(temp_dir, "summary.xlsx")
             output_idt = os.path.join(temp_dir, "idt_order.xlsx")
 
-            summary(
+            result_df = summary(
                 input_=gene_file,
                 primer_selection=selection_file,
                 primer_info=primer_info_file,
@@ -259,6 +271,9 @@ class TestIDTOrdering:
                 output_idt_order=output_idt,
                 idt_pool_prefix="CONSISTENCY_TEST",
             )
+
+            assert result_df is not None, "Summary should return a DataFrame"
+            assert not result_df.empty, "Summary should return non-empty DataFrame"
 
             idt_data = pd.read_excel(output_idt)
 

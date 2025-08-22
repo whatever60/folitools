@@ -87,6 +87,7 @@ def summary(
 ) -> pd.DataFrame:
     """
     Generate an Excel file for primer ordering.
+    
     Args:
         input_ (str): Path to gene info tsv file.
         primer_selection (str): Path to selected primers tsv file.
@@ -95,6 +96,10 @@ def summary(
         has_linker (bool): Whether to include linker sequences in primers.
         output_idt_order (str | None): Optional path to output IDT ordering Excel file.
         idt_pool_prefix (str): Prefix for IDT pool names (default: "pool").
+    
+    Returns:
+        pd.DataFrame: A DataFrame containing the primer ordering information with 
+        all necessary columns for further processing or analysis.
     """
     selection = pd.read_table(primer_selection)
     primer_info_df = pd.read_table(primer_info)

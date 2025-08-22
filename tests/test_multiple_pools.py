@@ -62,7 +62,7 @@ def test_multiple_pools():
     print(f"Testing with {num_genes} genes ({num_genes * 2} primers)...")
 
     try:
-        summary(
+        result_df = summary(
             input_=gene_file,
             primer_selection=selection_file,
             primer_info=primer_info_file,
@@ -72,6 +72,8 @@ def test_multiple_pools():
             idt_pool_prefix="MULTI_POOL",
         )
 
+        assert result_df is not None, "Summary should return a DataFrame"
+        assert not result_df.empty, "Summary should return non-empty DataFrame"
         print("✓ Summary function completed successfully")
 
         # Check if IDT file was created

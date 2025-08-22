@@ -69,13 +69,16 @@ class TestPipelineIntegration:
         primer_sequence_file = temp_output_dir / "primer_sequence.tsv"
         primer_info_file = temp_output_dir / "primer_info.tsv"
 
-        subset(
+        subset_result = subset(
             gene_table_file=mouse_genes_file,
             species="mouse",
             amplicon_size_range=(320, 380),
             output_primer_sequence=primer_sequence_file,
             output_primer_info=primer_info_file,
         )
+
+        assert subset_result is not None, "Subset should return a DataFrame"
+        assert not subset_result.empty, "Subset should return non-empty DataFrame"
 
         # Run saddle
         output_selected = temp_output_dir / "selected_primers.tsv"

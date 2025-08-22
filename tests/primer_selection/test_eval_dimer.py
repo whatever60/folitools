@@ -25,7 +25,9 @@ CGATCGATCGAT
 >i5_primer_003
 TTTTAAAACCCC
 """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".fasta", delete=False
+    ) as tmp_file:
         tmp_file.write(fasta_content)
         fasta_path = Path(tmp_file.name)
 
@@ -43,7 +45,9 @@ GGGGTTTTAAAA
 >i7_primer_002
 ATCGATCGATCG
 """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".fasta", delete=False
+    ) as tmp_file:
         tmp_file.write(fasta_content)
         fasta_path = Path(tmp_file.name)
 
@@ -56,7 +60,9 @@ ATCGATCGATCG
 @pytest.fixture
 def empty_fasta() -> Generator[Path, None, None]:
     """Create a temporary empty FASTA file."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".fasta", delete=False
+    ) as tmp_file:
         tmp_file.write("")
         fasta_path = Path(tmp_file.name)
 
@@ -76,7 +82,9 @@ ATG CGT ACG
 CGAT	CGAT
 CGAT
 """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".fasta", delete=False
+    ) as tmp_file:
         tmp_file.write(fasta_content)
         fasta_path = Path(tmp_file.name)
 
@@ -115,7 +123,7 @@ class TestReadFasta:
     def test_read_fasta_file_not_found(self):
         """Test FileNotFoundError when FASTA file doesn't exist."""
         nonexistent_path = Path("/nonexistent/path/file.fasta")
-        
+
         with pytest.raises(FileNotFoundError, match="FASTA not found"):
             _read_fasta(nonexistent_path)
 
@@ -128,10 +136,10 @@ class TestReadFasta:
         """Test that both Path objects and string paths work."""
         # Test with Path object
         names1, seqs1 = _read_fasta(sample_i5_fasta)
-        
+
         # Test with string path
         names2, seqs2 = _read_fasta(str(sample_i5_fasta))
-        
+
         assert names1 == names2
         assert seqs1 == seqs2
 
@@ -200,10 +208,10 @@ class TestDimerThermoProperty:
         # Check index and column labels
         expected_labels = [
             "i5_primer_001_fwd",
-            "i5_primer_002_fwd", 
+            "i5_primer_002_fwd",
             "i5_primer_003_fwd",
             "i7_primer_001_rev",
-            "i7_primer_002_rev"
+            "i7_primer_002_rev",
         ]
         assert list(dg_df.index) == expected_labels
         assert list(dg_df.columns) == expected_labels
@@ -214,22 +222,21 @@ class TestDimerThermoProperty:
         assert np.all(np.isfinite(dg_df.values))
         assert np.all(np.isfinite(tm_df.values))
 
-    def test_dimer_thermo_property_custom_suffixes(self, sample_i5_fasta, sample_i7_fasta):
+    def test_dimer_thermo_property_custom_suffixes(
+        self, sample_i5_fasta, sample_i7_fasta
+    ):
         """Test with custom suffixes for primer names."""
         dg_df, tm_df = dimer_thermo_property(
-            sample_i5_fasta, 
-            sample_i7_fasta,
-            i5_suffix="forward",
-            i7_suffix="reverse"
+            sample_i5_fasta, sample_i7_fasta, i5_suffix="forward", i7_suffix="reverse"
         )
 
         # Check that custom suffixes are used
         expected_labels = [
             "i5_primer_001_forward",
-            "i5_primer_002_forward", 
+            "i5_primer_002_forward",
             "i5_primer_003_forward",
             "i7_primer_001_reverse",
-            "i7_primer_002_reverse"
+            "i7_primer_002_reverse",
         ]
         assert list(dg_df.index) == expected_labels
         assert list(tm_df.index) == expected_labels
@@ -244,7 +251,7 @@ class TestDimerThermoProperty:
                 sample_i5_fasta,
                 sample_i7_fasta,
                 output_dg_csv=dg_output,
-                output_tm_csv=tm_output
+                output_tm_csv=tm_output,
             )
 
             # Check that files were created
@@ -258,16 +265,16 @@ class TestDimerThermoProperty:
             pd.testing.assert_frame_equal(dg_df, dg_loaded)
             pd.testing.assert_frame_equal(tm_df, tm_loaded)
 
-    def test_dimer_thermo_property_output_directory_creation(self, sample_i5_fasta, sample_i7_fasta):
+    def test_dimer_thermo_property_output_directory_creation(
+        self, sample_i5_fasta, sample_i7_fasta
+    ):
         """Test that output directories are created if they don't exist."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             nested_dir = Path(tmp_dir) / "nested" / "directory"
             dg_output = nested_dir / "dg_output.csv"
 
             dg_df, tm_df = dimer_thermo_property(
-                sample_i5_fasta,
-                sample_i7_fasta,
-                output_dg_csv=dg_output
+                sample_i5_fasta, sample_i7_fasta, output_dg_csv=dg_output
             )
 
             # Check that nested directory was created
@@ -292,7 +299,9 @@ class TestDimerThermoProperty:
         with pytest.raises(ValueError, match="No sequences found"):
             dimer_thermo_property(empty_fasta, sample_i5_fasta)
 
-    def test_dimer_thermo_property_matrix_blocks(self, sample_i5_fasta, sample_i7_fasta):
+    def test_dimer_thermo_property_matrix_blocks(
+        self, sample_i5_fasta, sample_i7_fasta
+    ):
         """Test that the combined matrix has correct block structure."""
         dg_df, tm_df = dimer_thermo_property(sample_i5_fasta, sample_i7_fasta)
 
@@ -329,7 +338,9 @@ class TestDimerThermoProperty:
         dg_df1, tm_df1 = dimer_thermo_property(sample_i5_fasta, sample_i7_fasta)
 
         # Test with string paths
-        dg_df2, tm_df2 = dimer_thermo_property(str(sample_i5_fasta), str(sample_i7_fasta))
+        dg_df2, tm_df2 = dimer_thermo_property(
+            str(sample_i5_fasta), str(sample_i7_fasta)
+        )
 
         pd.testing.assert_frame_equal(dg_df1, dg_df2)
         pd.testing.assert_frame_equal(tm_df1, tm_df2)
@@ -342,12 +353,16 @@ ATGCGTACGGTA
         single_i7_content = """>single_i7
 GGGGTTTTAAAA
 """
-        
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_i5:
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".fasta", delete=False
+        ) as tmp_i5:
             tmp_i5.write(single_i5_content)
             i5_path = Path(tmp_i5.name)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_i7:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".fasta", delete=False
+        ) as tmp_i7:
             tmp_i7.write(single_i7_content)
             i7_path = Path(tmp_i7.name)
 

@@ -1,0 +1,21 @@
+group	gene	primer_fwd	primer_rev	pool
+group1	Actb			pool1
+group1	Gapdh			pool1
+group1	Hprt1			pool1
+group1	Tbp			pool1
+group1	B2m			pool1
+group2	Il1b			pool2
+group2	Il6			pool2
+group2	Tnf			pool2
+group2	Nfkb1			pool2
+group2	Stat1			pool2
+group3	Cd68			pool3
+group3	Itgam			pool3
+group3	Csf1r			pool3
+group3	Aif1			pool3
+group3	Cx3cr1			pool3
+group4	Gfap			pool4
+group4	S100b			pool4
+group4	Aldh1l1			pool4
+group4	Aqp4			pool4
+group4	Vim			pool4

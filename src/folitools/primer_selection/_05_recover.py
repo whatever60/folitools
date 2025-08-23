@@ -181,6 +181,22 @@ def _enrich_locate_df(
     "seqID" is a pipe-separated string and indices [0] = transcript_id, [1] = gene_id,
     [5] = gene_symbol.
     """
+    if locate_df.empty:
+        # Single source of truth (local to this branch) for columns & dtypes
+        spec = [
+            ("primer_seq", "string"),
+            ("primer_seq_full", "string"),
+            ("primer_type", "string"),
+            ("transcript_id", "string"),
+            ("gene_id", "string"),
+            ("gene_symbol", "string"),
+            ("start", "Int64"),
+            ("end", "Int64"),
+            ("strand", "string"),
+            ("pool", "string"),
+        ]
+        return pd.DataFrame({c: pd.Series(dtype=dt) for c, dt in spec})
+
     df = locate_df.copy()
     df["primer_seq"] = df["pattern"].str.upper()
 
@@ -188,7 +204,7 @@ def _enrich_locate_df(
     parts = df["seqID"].astype(str).str.split("|", expand=True)
     df["transcript_id"] = parts[0]
     df["gene_id"] = parts[1] if parts.shape[1] > 1 else "_NA"
-    df["gene_symbol"] = parts[5] if parts.shape[1] > 5 else parts[0]
+    df["gene_symbol"] = parts[5] if parts.shape[1] > 5 else df["transcript_id"]
 
     merged = pd.merge(df, primer_info, how="left", on="primer_seq")
     if merged["pool"].isna().any():
@@ -278,7 +294,22 @@ def _build_amplicons(locate_final: pd.DataFrame) -> pd.DataFrame:
 
     amplicon_all = pd.DataFrame(rows)
     if amplicon_all.empty:
-        raise ValueError("No amplicons were formed. Check inputs and prefixes.")
+        spec = [
+            ("primer_seq_fwd", "string"),
+            ("primer_seq_rev", "string"),
+            ("transcript_id", "string"),
+            ("gene_id", "string"),
+            ("gene_symbol", "string"),
+            ("start_up", "Int64"),
+            ("end_up", "Int64"),
+            ("start_down", "Int64"),
+            ("end_down", "Int64"),
+            ("pool_fwd", "string"),
+            ("pool_rev", "string"),
+            ("flipped", "boolean"),
+            ("amplicon_length", "Int64"),
+        ]
+        return pd.DataFrame({c: pd.Series(dtype=dt) for c, dt in spec})
     return amplicon_all
 
 
@@ -289,24 +320,23 @@ def _group_pairs(amplicon_sub: pd.DataFrame) -> pd.DataFrame:
     and a semicolon-joined "multi_mapping" column.
     """
     if amplicon_sub.empty:
-        return pd.DataFrame(
-            columns=[
-                "primer_seq_fwd",
-                "primer_seq_rev",
-                "transcript_id",
-                "gene_id",
-                "gene_symbol",
-                "start_up",
-                "end_up",
-                "start_down",
-                "end_down",
-                "pool_fwd",
-                "pool_rev",
-                "num_transcripts",
-                "num_genes",
-                "transcript_id_all",
-            ]
-        )
+        spec = [
+            ("primer_seq_fwd", "string"),
+            ("primer_seq_rev", "string"),
+            ("transcript_id", "string"),
+            ("gene_id", "string"),
+            ("gene_symbol", "string"),
+            ("start_up", "Int64"),
+            ("end_up", "Int64"),
+            ("start_down", "Int64"),
+            ("end_down", "Int64"),
+            ("pool_fwd", "string"),
+            ("pool_rev", "string"),
+            ("num_transcripts", "Int64"),
+            ("num_genes", "Int64"),
+            ("transcript_id_all", "string"),
+        ]
+        return pd.DataFrame({c: pd.Series(dtype=dt) for c, dt in spec})
 
     rows: list[dict] = []
     grouped = amplicon_sub.groupby(["primer_seq_fwd", "primer_seq_rev"], sort=False)
@@ -366,22 +396,21 @@ def _build_summary_df(
     """
     df = grouped_pairs.copy()
     if df.empty:
-        return pd.DataFrame(
-            columns=[
-                "Group",
-                "geneSymbol",
-                "geneID",
-                "Chosen Index",
-                "amplicon_index",
-                "L_seq",
-                "R_seq",
-                "primer_sequence_to_order_forward",
-                "primer_sequence_to_order_reverse",
-                "L_pool",
-                "R_pool",
-                "multi_mapping",
-            ]
-        )
+        spec = [
+            ("Group", "string"),
+            ("geneSymbol", "string"),
+            ("geneID", "string"),
+            ("Chosen Index", "Int64"),
+            ("amplicon_index", "string"),
+            ("L_seq", "string"),
+            ("R_seq", "string"),
+            ("primer_sequence_to_order_forward", "string"),
+            ("primer_sequence_to_order_reverse", "string"),
+            ("L_pool", "string"),
+            ("R_pool", "string"),
+            ("multi_mapping", "string"),
+        ]
+        return pd.DataFrame({c: pd.Series(dtype=dt) for c, dt in spec})
 
     df_out = df.rename(
         columns={

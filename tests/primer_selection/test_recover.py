@@ -190,6 +190,35 @@ class TestSanityChecks:
 class TestHelperFunctions:
     """Test helper functions."""
 
+    def test_enrich_locate_df_empty_input(self):
+        """Test enriching locate DataFrame with empty input."""
+        empty_locate_df = pd.DataFrame()
+        empty_primer_info = pd.DataFrame()
+        
+        result = _enrich_locate_df(empty_locate_df, empty_primer_info)
+        
+        expected_cols = [
+            "primer_seq",
+            "primer_seq_full",
+            "primer_type",
+            "transcript_id",
+            "gene_id",
+            "gene_symbol",
+            "start",
+            "end",
+            "strand",
+            "pool",
+        ]
+        assert list(result.columns) == expected_cols
+        assert len(result) == 0
+        
+        # Test that dtypes are properly normalized
+        assert result.dtypes["start"] == "Int64"
+        assert result.dtypes["end"] == "Int64"
+        assert result.dtypes["primer_seq"] == "string"
+        assert result.dtypes["primer_seq_full"] == "string"
+        assert result.dtypes["strand"] == "string"
+
     def test_enrich_locate_df(self, sample_locate_df, sample_primer_info):
         """Test enriching locate DataFrame with primer info."""
         result = _enrich_locate_df(sample_locate_df, sample_primer_info)
@@ -227,8 +256,34 @@ class TestHelperFunctions:
             }
         )
 
-        with pytest.raises(ValueError, match="No amplicons were formed"):
-            _build_amplicons(locate_final)
+        result = _build_amplicons(locate_final)
+        assert result.empty
+        
+        expected_cols = [
+            "primer_seq_fwd",
+            "primer_seq_rev",
+            "transcript_id",
+            "gene_id",
+            "gene_symbol",
+            "start_up",
+            "end_up",
+            "start_down",
+            "end_down",
+            "pool_fwd",
+            "pool_rev",
+            "flipped",
+            "amplicon_length",
+        ]
+        assert list(result.columns) == expected_cols
+        
+        # Test that dtypes are properly normalized
+        assert result.dtypes["start_up"] == "Int64"
+        assert result.dtypes["end_up"] == "Int64"
+        assert result.dtypes["start_down"] == "Int64"
+        assert result.dtypes["end_down"] == "Int64"
+        assert result.dtypes["amplicon_length"] == "Int64"
+        assert result.dtypes["flipped"] == "boolean"
+        assert result.dtypes["primer_seq_fwd"] == "string"
 
     def test_group_pairs_empty_input(self):
         """Test grouping pairs with empty input."""
@@ -253,6 +308,15 @@ class TestHelperFunctions:
         ]
         assert list(result.columns) == expected_cols
         assert len(result) == 0
+        
+        # Test that dtypes are properly normalized
+        assert result.dtypes["start_up"] == "Int64"
+        assert result.dtypes["end_up"] == "Int64"
+        assert result.dtypes["start_down"] == "Int64"
+        assert result.dtypes["end_down"] == "Int64"
+        assert result.dtypes["num_transcripts"] == "Int64"
+        assert result.dtypes["num_genes"] == "Int64"
+        assert result.dtypes["primer_seq_fwd"] == "string"
 
     def test_build_summary_df_empty_input(self):
         """Test building summary DataFrame with empty input."""
@@ -278,3 +342,12 @@ class TestHelperFunctions:
         ]
         assert list(result.columns) == expected_cols
         assert len(result) == 0
+        
+        # Test that dtypes are properly normalized
+        assert result.dtypes["Chosen Index"] == "Int64"
+        assert result.dtypes["Group"] == "string"
+        assert result.dtypes["geneSymbol"] == "string"
+        assert result.dtypes["geneID"] == "string"
+        assert result.dtypes["amplicon_index"] == "string"
+        assert result.dtypes["L_seq"] == "string"
+        assert result.dtypes["R_seq"] == "string"

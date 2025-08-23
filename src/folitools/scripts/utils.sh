@@ -34,17 +34,10 @@ extract_sample_name() {
         return 1
     fi
     
-    # Extract the sample name (remove R1/R2 indicators if present)
-    # First remove common R1/R2 patterns like _R1, _1, .R1, .1, etc.
-    sample_name="$basename_file"
-    sample_name="${sample_name%_R1}"
-    sample_name="${sample_name%_R2}"
-    sample_name="${sample_name%_1}"
-    sample_name="${sample_name%_2}"
-    sample_name="${sample_name%.R1}"
-    sample_name="${sample_name%.R2}"
-    sample_name="${sample_name%.1}"
-    sample_name="${sample_name%.2}"
+    # New behavior: sample name is the first token before any '_' or '.'
+    # This replaces earlier logic that only trimmed trailing read indicators.
+    # Example: SAMPLE_ABC_R1_L001 -> SAMPLE; SAMPLE.ABC.R1 -> SAMPLE
+    sample_name="${basename_file%%[._]*}"
     echo "$sample_name"
 }
 

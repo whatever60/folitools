@@ -109,13 +109,14 @@ class TestUtilityFunctions:
         "input_file,expected_sample",
         [
             ("ABC001_R1.fq.gz", "ABC001"),
-            ("sample_123_R2.fastq", "sample_123"),
+            # New behavior: take first token before any '_' or '.'
+            ("sample_123_R2.fastq", "sample"),
             ("patient-45.1.fq.gz", "patient-45"),
             ("ctrl.R1.fastq.gz", "ctrl"),
-            ("treatment_group_001.fq", "treatment_group_001"),
-            ("file_name_with_underscores_R1.fastq.gz", "file_name_with_underscores"),
+            ("treatment_group_001.fq", "treatment"),
+            ("file_name_with_underscores_R1.fastq.gz", "file"),
             ("simple.bam", "simple"),
-            ("complex_sample_name.sam", "complex_sample_name"),
+            ("complex_sample_name.sam", "complex"),
         ],
     )
     def test_extract_sample_name(self, scripts_dir, input_file, expected_sample):
@@ -331,18 +332,15 @@ class TestShellScriptRobustness:
         """Test sample name extraction with edge cases."""
         edge_cases = [
             # Complex sample names
-            (
-                "very_long_sample_name_with_many_underscores_R1.fastq.gz",
-                "very_long_sample_name_with_many_underscores",
-            ),
-            ("SAMPLE-WITH-DASHES_R2.fq", "SAMPLE-WITH-DASHES"),
-            ("123numeric_start_R1.fq.gz", "123numeric_start"),
+            ("very_long_sample_name_with_many_underscores_R1.fastq.gz", "very"),
+            ("SAMPLE-WITH-DASHES_R2.fq", "SAMPLE-WITH-DASHES"),  # dash preserved
+            ("123numeric_start_R1.fq.gz", "123numeric"),
             ("CamelCase_R1.fastq", "CamelCase"),
             # Files without R1/R2 indicators
-            ("just_sample_name.fq.gz", "just_sample_name"),
-            ("another.sample.bam", "another.sample"),
-            # Multiple dots and underscores
-            ("sample.v1.2_final_R1.fq.gz", "sample.v1.2_final"),
+            ("just_sample_name.fq.gz", "just"),
+            ("another.sample.bam", "another"),
+            # Multiple dots and underscores now truncate at first separator
+            ("sample.v1.2_final_R1.fq.gz", "sample"),
         ]
 
         for input_file, expected_sample in edge_cases:

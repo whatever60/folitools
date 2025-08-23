@@ -290,7 +290,7 @@ for input_file in "${input_files[@]}"; do
         # Mock featurecounts summary
         create_mock_summary "$star_bam" "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
     else
-        FIFO="$FEATURECOUNTS_DIR/Aligned.out.bam.featureCounts.bam"
+        FIFO="$FEATURECOUNTS_DIR/$star_bam.featureCounts.bam"
         if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
             echo "Error: $FIFO exists but is not a FIFO" >&2
             exit 1

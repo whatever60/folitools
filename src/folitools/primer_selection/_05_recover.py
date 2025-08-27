@@ -740,6 +740,7 @@ def recover(
     *,
     amplicon_length_range: tuple[int, int] = (320, 380),
     threads: int = 1,
+    simplify_gene_name: bool = True,
 ) -> pd.DataFrame:
     """Recover the primer summary from an IDT order Excel and a transcriptome FASTA.
 
@@ -756,8 +757,10 @@ def recover(
         has_linker: Whether the panel used the extra 6bp linker after NNNNNN (ACATCA/ATAGTT).
         output_order_excel: If provided, write the recovered summary to this Excel path.
         output_report: If provided, write a PDF report with sanity-check plots.
-        amplicon_length_range: Inclusive target amplicon length range used for filtering.
+        amplicon_length_range: Inclusive target amplicon length range used for filtering. 
+            Use -1 to indicate no bound (e.g., (-1, 380) for no minimum, (320, -1) for no maximum).
         threads: Number of threads for `seqkit locate` (defaults to `os.cpu_count()`).
+        simplify_gene_name: Whether to simplify gene names by removing redundant/uninformative tokens (default: True).
 
     Returns:
         A pandas DataFrame of the recovered summary with the following columns:
@@ -804,9 +807,22 @@ def recover(
     amplicon_all = _build_amplicons(locate_df_final)
 
     lo, hi = amplicon_length_range
-    amplicon_sub = amplicon_all[
-        amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
-    ].copy()
+    
+    # Handle -1 as infinite bounds for filtering
+    if lo == -1 and hi == -1:
+        # No filtering if both bounds are -1
+        amplicon_sub = amplicon_all.copy()
+    elif lo == -1:
+        # No lower bound, only upper bound
+        amplicon_sub = amplicon_all[amplicon_all["amplicon_length"] <= hi].copy()
+    elif hi == -1:
+        # No upper bound, only lower bound
+        amplicon_sub = amplicon_all[amplicon_all["amplicon_length"] >= lo].copy()
+    else:
+        # Both bounds specified
+        amplicon_sub = amplicon_all[
+            amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
+        ].copy()
     _sanity_check_genes_per_primer_pair(amplicon_sub)
     _sanity_check_amplicons_per_pair(amplicon_sub)
     _sanity_check_cross_pool_amplicons(amplicon_sub)
@@ -833,10 +849,14 @@ def recover(
 
     # Create SeqRecord lists for i5/i7 short FASTAs
     i5_records = _create_fasta_records(
-        summary_df.set_index("L_seq")["multi_mapping"], primer_seqs_fwd
+        summary_df.set_index("L_seq")["multi_mapping"],
+        primer_seqs_fwd,
+        simplify_gene_name=simplify_gene_name,
     )
     i7_records = _create_fasta_records(
-        summary_df.set_index("R_seq")["multi_mapping"], primer_seqs_rev
+        summary_df.set_index("R_seq")["multi_mapping"],
+        primer_seqs_rev,
+        simplify_gene_name=simplify_gene_name,
     )
 
     # Write i5/i7 short FASTAs if output paths are provided
@@ -858,11 +878,11 @@ def collapse_to_id(series: pd.Series) -> str:
             symbols.add(fields[2])
     rid = "|".join(sorted(symbols)) if symbols else "_NA"
     # Keep existing behavior of simplifying the gene list
-    return simplify_gene_list(rid)
+    return rid
 
 
 def _create_fasta_records(
-    primer_mappings: pd.Series, seqs_all: list[str]
+    primer_mappings: pd.Series, seqs_all: list[str], *, simplify_gene_name: bool = True
 ) -> list[SeqRecord]:
     """Create a list of SeqRecord objects from the summary DataFrame.
 
@@ -875,6 +895,7 @@ def _create_fasta_records(
         primer_mappings: A pandas Series with sequences as index (can have duplicates)
                          and "multi_mapping" strings as values.
         seqs_all: A list of all expected sequences ("L_seq" or "R_seq").
+        simplify_gene_name: Whether to simplify gene names by removing redundant/uninformative tokens.
 
     Returns:
         A list of SeqRecord objects.
@@ -890,7 +911,16 @@ def _create_fasta_records(
     # Group by index (sequence) and apply collapse_to_id
     mapping_df = (
         primer_mappings.groupby(primer_mappings.index)
-        .apply(collapse_to_id)
+        .apply(
+            lambda series: "|".join(
+                simplify_gene_list(
+                    collapse_to_id(series).split("|"), 
+                    collapse_families=True
+                )
+            )
+            if simplify_gene_name
+            else collapse_to_id(series)
+        )
         .reset_index()
     )
     mapping_df.columns = ["seq", "record_id"]

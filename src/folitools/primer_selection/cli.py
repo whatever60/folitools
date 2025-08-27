@@ -10,6 +10,8 @@ saddle
     Select an optimal primer set using SADDLE (simulated annealing).
 product
     Extract amplicon regions into FASTA using packaged references (by --species).
+recover
+    Recover primer summary from IDT order Excel file.
 
 workflow
     Run subset → saddle → product end-to-end.
@@ -35,6 +37,12 @@ folitools-primer product \
   --primer-info ./out/candidate_primer.320_380.primer_info.tsv \
   --species mouse \
   --output-fasta ./out/output_selected.region.fasta
+
+folitools-primer recover \
+  --order-excel ./idt_order.xlsx \
+  --output-dir ./recover_out \
+  --species mouse \
+  --simplify-gene-name
 
 folitools-primer workflow \
   --input ./genes.tsv \
@@ -205,6 +213,7 @@ def recover(
     has_linker: bool = False,
     amplicon_length_range: tuple[int, int] = (320, 380),
     cores: int = 1,
+    simplify_gene_name: bool = True,
 ) -> int:
     """Recover primer summary from IDT order Excel file.
 
@@ -214,8 +223,10 @@ def recover(
         species: Species for packaged transcriptome ("mouse" or "human").
         txome_fasta: Path to transcriptome FASTA (overrides species).
         has_linker: Whether primers include linker sequences.
-        amplicon_length_range: Target amplicon length range (default: 320-380).
+        amplicon_length_range: Target amplicon length range (default: 320-380). 
+            Use -1 for infinite bounds (e.g., (-1, 380) for no minimum, (320, -1) for no maximum).
         cores: Number of cores for seqkit locate.
+        simplify_gene_name: Whether to simplify gene names by removing redundant/uninformative tokens (default: True).
 
     Returns:
         Process exit code.
@@ -238,6 +249,7 @@ def recover(
         output_i7=output_i7,
         amplicon_length_range=amplicon_length_range,
         threads=cores,
+        simplify_gene_name=simplify_gene_name,
     )
     return 0
 

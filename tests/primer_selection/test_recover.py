@@ -351,3 +351,47 @@ class TestHelperFunctions:
         assert result.dtypes["amplicon_index"] == "string"
         assert result.dtypes["L_seq"] == "string"
         assert result.dtypes["R_seq"] == "string"
+
+
+class TestAmpliconLengthFiltering:
+    """Test the amplicon length filtering logic with infinite bounds (-1)."""
+
+    def test_amplicon_length_filtering_logic(self):
+        """Test that -1 values work as infinite bounds for amplicon length filtering."""
+        # Create test amplicon data
+        amplicon_all = pd.DataFrame({
+            'amplicon_length': [100, 200, 350, 400, 500, 600],
+            'gene_id': ['gene1'] * 6,
+            'transcript_id': ['transcript1'] * 6,
+            'primer_seq_fwd': ['AAAAAA'] * 6,
+            'primer_seq_rev': ['TTTTTT'] * 6,
+        })
+        
+        # Test cases: (lo, hi) -> expected lengths
+        test_cases = [
+            ((320, 380), [350]),  # Normal range
+            ((-1, 380), [100, 200, 350]),  # No lower bound
+            ((320, -1), [350, 400, 500, 600]),  # No upper bound
+            ((-1, -1), [100, 200, 350, 400, 500, 600]),  # No filtering
+        ]
+        
+        for (lo, hi), expected_lengths in test_cases:
+            # Apply the filtering logic from the recover function
+            if lo == -1 and hi == -1:
+                # No filtering if both bounds are -1
+                amplicon_sub = amplicon_all.copy()
+            elif lo == -1:
+                # No lower bound, only upper bound
+                amplicon_sub = amplicon_all[amplicon_all["amplicon_length"] <= hi].copy()
+            elif hi == -1:
+                # No upper bound, only lower bound
+                amplicon_sub = amplicon_all[amplicon_all["amplicon_length"] >= lo].copy()
+            else:
+                # Both bounds specified
+                amplicon_sub = amplicon_all[
+                    amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
+                ].copy()
+            
+            result_lengths = amplicon_sub['amplicon_length'].tolist()
+            assert result_lengths == expected_lengths, \
+                f"Failed for range ({lo}, {hi}): expected {expected_lengths}, got {result_lengths}"

@@ -51,8 +51,10 @@ def make_report(
         ax1.set_xlabel("Amplicon length (bp)")
         ax1.set_ylabel("Frequency")
         ax1.set_title("Amplicon length distribution")
+        # Only draw vertical lines for finite bounds (not -1)
         for v in length_range:
-            ax1.axvline(v, linestyle="--", alpha=0.5)
+            if v != -1:
+                ax1.axvline(v, linestyle="--", alpha=0.5)
         pdf.savefig(fig1)
         plt.close(fig1)
 

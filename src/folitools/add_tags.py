@@ -10,6 +10,7 @@ def add_tags_wo_fastq(
     umi_tag_s_name: str = "US",  # single-read UMI
     umi_tag_s_correct_name: str = "UC",  # single-read UMI (correct ones only)
     cell_tag_name: str = "CB",
+    primer_tag_name: str = "PR",
     cell_tag: str | None = None,
     umi_length: int = 6,
 ) -> None:
@@ -56,25 +57,39 @@ def add_tags_wo_fastq(
             if cell_tag:
                 read.set_tag(cell_tag_name, cell_tag, value_type="Z")
 
+            if "_" not in query_name:
+                # UMI sequences are not embedded in read name. We assume that these 
+                # reads already have their UMI extracted and put in the tag.
+                if not read.has_tag(umi_tag_s_name):
+                    raise ValueError(f"Missing UMI tag in read {query_name}")
+                bam_out.write(read)
+                continue
+
             # Add the UMI tag from the FASTQ sequence
-            read_name, seq1, seq2 = query_name.split("_")
+            read_name, seq1, seq2, primers = query_name.split("_", 3)
+            primer_fwd, primer_rev = primers.split("+")
             read.query_name = read_name
             criteria = [
                 len(seq1) == umi_length,
                 len(seq2) == umi_length,
                 "N" not in seq1,
                 "N" not in seq2,
+                primer_fwd == primer_rev,
             ]
-            if not all(criteria):
-                seq1_c = seq2_c = "AAAAAA"
-            else:
-                seq1_c, seq2_c = seq1, seq2
+            # if not all(criteria):
+            #     seq1_c = seq2_c = "AAAAAA"
+            # else:
+            #     seq1_c, seq2_c = seq1, seq2
             if read.is_read1:
                 read.set_tag(umi_tag_s_name, seq1, value_type="Z")
-                read.set_tag(umi_tag_s_correct_name, seq1_c, value_type="Z")
             else:
                 read.set_tag(umi_tag_s_name, seq2, value_type="Z")
-                read.set_tag(umi_tag_s_correct_name, seq2_c, value_type="Z")
+
+            read.set_tag(primer_tag_name, primers, value_type="Z")
+
+            if all(criteria):
+                read.set_tag(umi_tag_s_correct_name, seq1 + seq2, value_type="Z")
+
             if not read.has_tag("XT"):  # No feature assigned by featurecounts
                 assert str(read.get_tag("XS")).startswith("Unassigned")
                 read.set_tag("XN", -1, value_type="i")

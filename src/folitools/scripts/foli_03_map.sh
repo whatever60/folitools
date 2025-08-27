@@ -234,8 +234,14 @@ for input_file in "${input_files[@]}"; do
             "$fqR1" "$fqR2" \
             2> /dev/null \
             | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
-                '
+               '
                     {
+                        # Replace space with underscore only on header lines
+                        if ((NR - 1) % 4 == 0) {
+                            gsub(" ", "_", $0)
+                        }
+
+                        # Write to R1 (first 4 lines) or R2 (next 4 lines) in each 8-line block
                         if (((NR - 1) % 8) < 4) {
                             print $0 > p1
                         } else {
@@ -276,11 +282,12 @@ for input_file in "${input_files[@]}"; do
     #  turn on the --donotsort flag, as paired reads are already together. Even though it won't make 
     #  any difference here, it's still good to be explicit.
 
-    # featurecounts cannot handle empty input. so check if the bam from star is empty. 
-    # If so, just copy it and touch other output files
     first_bam_line=$(samtools view "$star_bam" | head -n1) || true
     final_bam="$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
+    # featurecounts cannot handle empty input. so check if the bam from star is empty. 
+    # If so, just copy it and touch other output files
     if ! echo "$first_bam_line" | grep -q .; then
+        echo $first_bam_line >&2
         cp "$star_bam" "$final_bam"
         samtools index "$final_bam"
         echo "Empty bam, featurecounts not run" > "$FEATURECOUNTS_DIR/${sample_name}.log"
@@ -290,7 +297,7 @@ for input_file in "${input_files[@]}"; do
         # Mock featurecounts summary
         create_mock_summary "$star_bam" "$FEATURECOUNTS_DIR/${sample_name}.txt.summary"
     else
-        FIFO="$FEATURECOUNTS_DIR/$star_bam.featureCounts.bam"
+        FIFO="$FEATURECOUNTS_DIR/$(basename $star_bam).featureCounts.bam"
         if [ -e "$FIFO" ] && [ ! -p "$FIFO" ]; then
             echo "Error: $FIFO exists but is not a FIFO" >&2
             exit 1

@@ -281,6 +281,13 @@ for input_file in "${input_files[@]}"; do
     #  By default, featureCounts will sort such that paired reads are together. We here 
     #  turn on the --donotsort flag, as paired reads are already together. Even though it won't make 
     #  any difference here, it's still good to be explicit.
+    # --countReadPairs: featureCounts would drop R2 alignments, which we DO NOT want.
+    # featureCounts input and output order:
+    #   1. featureCounts makes sure that input is sorted such that alignments with the same QNAMEs are
+    #   adjacent. If the input is already sorted as such, --donotsort can be used to 
+    #   skip the sorting step.
+    #   2. featureCounts output BAM does not have any orders when there are more than 1 
+    #   threads. Alignments with the same QNAMEs can be separated.
 
     first_bam_line=$(samtools view "$star_bam" | head -n1) || true
     final_bam="$FEATURECOUNTS_DIR/${sample_name}.sorted.bam"
@@ -319,7 +326,6 @@ for input_file in "${input_files[@]}"; do
             -a $GTF_PATH \
             -o $TEMP_FC_TXT \
             -p \
-            --countReadPairs \
             -B -C \
             -s $STRAND \
             --donotsort \

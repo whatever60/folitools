@@ -63,6 +63,16 @@ for bam in "${bams[@]}"; do
     # --log2stderr with 2> <file> to redirect stderr to a clean file.
     # What is the effect of --paired?
     # What is the effect of --out-sam in umi_tools count if it does not output BAM at all?
+    # umi_tools paired end behaviors:
+    #    1. It gets cell tags, gene tags and umi tags only from R1. It does not care if 
+    #    R2 has them or not. Also, it won't verify if R1 and R2 have the same tags.
+    #    2. Thus, if both R1 and R2 have UMI sequences, users are responsible for concatenating
+    #    them into R1 UMI before running umi_tools.
+    # umi_tools multimapping behaviors:
+    #    1. umi_tools only uses the primary alignment for UMI deduplication and counting.
+    #    But secondary/supplementary alignments are also output to the tsv or bam as is.
+    #    Therefore, it should be noted that non-primary alignments are not used by umi_tools,
+    #    and even they are reflected in the outputs, we do not consider them informative.
 
     # Run the `group` subcommand to get richer information.
     # Count matrix can be derived from {sample_name}.group.tsv.gz.
@@ -72,9 +82,8 @@ for bam in "${bams[@]}"; do
         --per-gene \
         --cell-tag CB \
         --cell-tag-split "" \
-        --gene-tag XT \
+        --gene-tag XF \
         --umi-tag UC \
-        --assigned-status-tag XT \
         --extract-umi-method tag \
         --paired \
         --unmapped-reads output \

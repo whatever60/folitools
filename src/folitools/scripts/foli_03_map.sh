@@ -352,9 +352,13 @@ for input_file in "${input_files[@]}"; do
         eval "$FEATURECOUNTS_CMD" \
             2> "$FEATURECOUNTS_DIR/$sample_name.log" \
         & \
-        python -m folitools.add_tags \
-            --input "$FIFO" \
-            --cell_tag ${sample_name} \
+        samtools collate \
+            -O \
+            -l 1 \
+            --threads 1 \
+            "$FIFO" \
+        | \
+        python -m folitools.add_tags --cell_tag ${sample_name} \
         | \
         sambamba sort \
             --nthreads "$SORT_THREADS" \
@@ -364,7 +368,7 @@ for input_file in "${input_files[@]}"; do
             2> /dev/null \
         & \
         wait
-        
+
         rm -f "$FIFO"
 
         # Check if the temporary BAM file was created successfully

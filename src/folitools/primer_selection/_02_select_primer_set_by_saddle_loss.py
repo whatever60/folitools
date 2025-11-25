@@ -396,19 +396,18 @@ def load_primer_data(
         primers:  Flattened list of all sequences for precomputation.
     """
     df = pd.read_csv(input_, sep="\t")
-    df.columns = ["gene", "design", "seq_f", "seq_r"]
     print(f"Loaded {len(df)} primer records")
 
     primer_info_pool: dict[str, list[tuple[str, str, str]]] = {}
     primers: list[str] = []
 
-    for gene, group in df.groupby("gene"):
+    for gene, group in df.groupby("geneSymbol"):
         assert isinstance(gene, str)
         primer_info_pool[gene] = []
         for _, row in group.iterrows():
-            design = row["design"]
-            seq_f = row["seq_f"]
-            seq_r = row["seq_r"]
+            design = row["amplicon_index"]
+            seq_f = row["L_seq"]
+            seq_r = row["R_seq"]
             primer_info_pool[gene].append((design, seq_f, seq_r))
             primers.extend([seq_f, seq_r])
 

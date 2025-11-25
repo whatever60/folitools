@@ -227,7 +227,6 @@ def subset(
     gene_table_file: Path,
     species: str,
     amplicon_size_range: tuple[int, int],
-    output_primer_sequence: Path,
     output_primer_info: Path,
 ) -> pd.DataFrame:
     """Run the subset operation end-to-end.
@@ -237,7 +236,6 @@ def subset(
         amplicon_size_range: Range like "320-380" (also accepts "320:380").
         gene_table_file: Path to the user TSV with columns ``gene`` and ``group``,
             optionally ``primer_fwd`` and ``primer_rev``.
-        output_primer_sequence: Path to write primer sequence TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
         output_primer_info: Path to write primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
 
     Returns:
@@ -251,7 +249,7 @@ def subset(
     amin, amax = amplicon_size_range
 
     # Validate output file extensions
-    _validate_output_file_extensions(output_primer_sequence, output_primer_info)
+    _validate_output_file_extensions(output_primer_info)
 
     # Resolve packaged inputs
     suffix = f"{amin}_{amax}"
@@ -264,7 +262,6 @@ def subset(
             raise FileNotFoundError(f"Packaged input not found: {p}")
 
     # Ensure output directories exist
-    output_primer_sequence.parent.mkdir(parents=True, exist_ok=True)
     output_primer_info.parent.mkdir(parents=True, exist_ok=True)
 
     # Load inputs
@@ -306,11 +303,9 @@ def subset(
             )
 
     # Save outputs
-    seq_f.to_csv(output_primer_sequence, sep="\t", index=False)
     info_f.to_csv(output_primer_info, sep="\t", index=False)
     # tx_f.to_csv(out_tx, sep="\t", index=False)
 
-    print(f"Wrote: {output_primer_sequence}")
     print(f"Wrote: {output_primer_info}")
     # print(f"Wrote: {out_tx}")
     print("Subset complete.")

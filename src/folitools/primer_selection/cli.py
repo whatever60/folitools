@@ -75,7 +75,6 @@ def subset(
     input_: Path,
     species: str,
     amplicon_size_range: tuple[int, int],
-    output_primer_sequence: Path,
     output_primer_info: Path,
 ) -> int:
     """Run the subset stage (packaged Parquet → filtered TSVs).
@@ -84,7 +83,6 @@ def subset(
         input_: TSV with columns: gene, group; optional primer_fwd, primer_rev.
         species: Species key (e.g., "mouse") mapping to packaged data.
         amplicon_size_range: Two integers MIN MAX. Example: `--amplicon-size-range 320 380`.
-        output_primer_sequence: Output path for primer sequence TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
         output_primer_info: Output path for primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
 
     Returns:
@@ -94,7 +92,6 @@ def subset(
         species=species,
         amplicon_size_range=amplicon_size_range,
         gene_table_file=input_,
-        output_primer_sequence=output_primer_sequence,
         output_primer_info=output_primer_info,
     )
     # _subset now returns a dict with DataFrames, so we return 0 for success
@@ -285,13 +282,11 @@ def workflow(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) subset
-    primer_seq = output_dir / "primer_sequence.tsv"
     primer_info = output_dir / "primer_info.tsv"
     _ = _subset(
         gene_table_file=input_,
         species=species,
         amplicon_size_range=amplicon_size_range,
-        output_primer_sequence=primer_seq,
         output_primer_info=primer_info,
     )
 
@@ -299,7 +294,7 @@ def workflow(
     selected_tsv = output_dir / "primer_sequence_selected.tsv"
     loss_tsv = output_dir / "primer_sequence_selected_loss.txt"
     _ = saddle(
-        input_=primer_seq,
+        input_=primer_info,
         output=selected_tsv,
         output_loss=loss_tsv,
         num_cycles_anneal=num_cycles_anneal,
@@ -319,13 +314,14 @@ def workflow(
 
     # 4) summary (Excel output)
     excel_out = output_dir / "primer_to_order.xlsx"
+    idt_order_out = output_dir / "primer_to_order_idt.xlsx"
     _summary(
         input_=str(input_),
         primer_selection=str(selected_tsv),
         primer_info=str(primer_info),
         output=str(excel_out),
         has_linker=False,
-        output_idt_order=None,
+        output_idt_order=str(idt_order_out),
         idt_pool_prefix="pool",
     )
     return 0

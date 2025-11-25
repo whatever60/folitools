@@ -107,7 +107,8 @@ def process_count_file_simple(fps: list[str]) -> pd.DataFrame:
 
 def count_umi(group_count: pl.DataFrame | pl.LazyFrame) -> pd.DataFrame:
     result = (
-        normalize_multimapping_umitools_group_output(group_count.lazy())
+        # normalize_multimapping_umitools_group_output(group_count.lazy())
+        group_count.lazy()
         .select(pl.struct(["gene", "final_umi"]).value_counts())
         .select(
             umi=pl.col("gene").struct.field("gene").struct.field("gene")
@@ -123,7 +124,8 @@ def count_umi(group_count: pl.DataFrame | pl.LazyFrame) -> pd.DataFrame:
 
 def count_gene(group_count: pl.DataFrame | pl.LazyFrame) -> pd.DataFrame:
     result = (
-        normalize_multimapping_umitools_group_output(group_count.lazy())
+        # normalize_multimapping_umitools_group_output(group_count.lazy())
+        group_count.lazy()
         .select(pl.col("gene").value_counts())
         .select(
             gene=pl.col("gene").struct.field("gene"),
@@ -400,6 +402,9 @@ def read_counts(
     # rename columns to gene symbols if map provided
     if gtf:
         id2symbol = id2symbol_from_gencode_gtf(gtf)
+        import pdb
+
+        pdb.set_trace()
         matrix.columns = [
             "|".join(
                 simplify_gene_list(

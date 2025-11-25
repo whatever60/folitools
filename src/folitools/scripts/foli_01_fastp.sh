@@ -76,25 +76,30 @@ for fqR1 in "${fqr1s[@]}"; do
     # run_fastqc "$fqR1" "$fqR2" "$FASTP_FASTQC_DIR" "$THREADS"
 
     # Run fastqc "$fqR1" "$fqR2" "$FASTQ_FASTQC_DIR" "$THREADS"
-    # No need for poly-G or TruSeq adapter trimming, fastp trimming by overlapp analysis is good enough. 
-    # fastp \
-    #     --in1 "$fqR1" \
-    #     --in2 "$fqR2" \
-    #     --stdout \
-    #     --thread "$THREADS" \
-    #     --cut_tail \
-    #     --correction \
-    #     --html "$FASTP_DIR/${sample_name}.fastp.html" \
-    #     --json "$FASTP_DIR/${sample_name}.fastp.json" \
-    #     2> /dev/null | cutadapt \
-    #         -e 2 \
-    #         -a "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC;min_overlap=5" \
-    #         -A "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT;min_overlap=5" \
-    #         -j "$THREADS" \
-    #         --interleaved \
-    #         -o "$trimmed_R1" \
-    #         -p "$trimmed_R2" \
-    #         - &> /dev/null
+    # NOTE:
+    # We saw in our NovaSeq X Plus sequencing data that read-through do not necessarily 
+    # end with poly-G tails, but rather a mixture of poly-G and poly-X and some other jibberish.
+    # In these case fastp cannot properly do poly-G trimming and overlap analysis will 
+    # also fail. That's why here we must use this extra step to remove TruSeq adapters 
+    # with cutadapt (since fastp adapter removal is not as flexible).
+    fastp \
+        --in1 "$fqR1" \
+        --in2 "$fqR2" \
+        --stdout \
+        --thread "$THREADS" \
+        --cut_tail \
+        --correction \
+        --html "$FASTP_DIR/${sample_name}.fastp.html" \
+        --json "$FASTP_DIR/${sample_name}.fastp.json" \
+        2> /dev/null | cutadapt \
+            -e 0.1 \
+            -a "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC;min_overlap=5" \
+            -A "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT;min_overlap=5" \
+            -j "$THREADS" \
+            --interleaved \
+            -o "$trimmed_R1" \
+            -p "$trimmed_R2" \
+            - &> /dev/null
         # --trim_poly_g \
         # --trim_poly_x \
         # --adapter_sequence AGATCGGAAGAGCACACGTC \
@@ -103,17 +108,17 @@ for fqR1 in "${fqr1s[@]}"; do
         # i7 adapter: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC
         # i5 adapter: AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
 
-    fastp \
-        --in1 "$fqR1" \
-        --in2 "$fqR2" \
-        --out1 "$trimmed_R1" \
-        --out2 "$trimmed_R2" \
-        --thread "$THREADS" \
-        --cut_tail \
-        --correction \
-        --html "$FASTP_DIR/${sample_name}.fastp.html" \
-        --json "$FASTP_DIR/${sample_name}.fastp.json" \
-        2> /dev/null
+    # fastp \
+    #     --in1 "$fqR1" \
+    #     --in2 "$fqR2" \
+    #     --out1 "$trimmed_R1" \
+    #     --out2 "$trimmed_R2" \
+    #     --thread "$THREADS" \
+    #     --cut_tail \
+    #     --correction \
+    #     --html "$FASTP_DIR/${sample_name}.fastp.html" \
+    #     --json "$FASTP_DIR/${sample_name}.fastp.json" \
+    #     2> /dev/null
 
     run_fastqc "$trimmed_R1" "$trimmed_R2" "$FASTP_FASTQC_DIR" "$THREADS"
 

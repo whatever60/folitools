@@ -66,7 +66,6 @@ class TestRecoverSmall:
             gene_table_file=genes_file,
             species="mouse",
             amplicon_size_range=(320, 380),
-            output_primer_sequence=primer_sequence_file,
             output_primer_info=primer_info_file,
         )
         assert result_df is not None, "Subset should return a DataFrame"
@@ -77,7 +76,7 @@ class TestRecoverSmall:
         loss_file = output_dir / "saddle_loss.txt"
 
         result_df = saddle(
-            input_=primer_sequence_file,
+            input_=primer_info_file,
             output=selected_file,
             output_loss=loss_file,
             num_cycles_anneal=5,  # Very reduced for testing

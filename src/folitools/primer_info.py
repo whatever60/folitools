@@ -162,7 +162,7 @@ def get_read_stats(
     os.makedirs(output_dir, exist_ok=True)
     read1_files = expand_path_to_list(read1_pattern)
     args = []
-    for i, read1_path in enumerate(tqdm(read1_files)):
+    for i, read1_path in enumerate(read1_files):
         if i < skip:
             continue
         sample = os.path.basename(read1_path).split("_")[0]
@@ -175,5 +175,5 @@ def get_read_stats(
         args.append((read1_path, read2_path, output_path))
     Parallel(n_jobs=cores)(
         delayed(process_sample)(read1_path, read2_path, output_path)
-        for read1_path, read2_path, output_path in args
+        for read1_path, read2_path, output_path in tqdm(args)
     )

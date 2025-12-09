@@ -1,12 +1,11 @@
 """Recover primer FASTA files from IDT order Excel."""
-
 import logging
 import os
 import shutil
 import subprocess
 from io import StringIO
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Callable
 
 import pandas as pd
 from Bio import SeqIO
@@ -27,6 +26,73 @@ logger.propagate = False
 logger.addHandler(handler)
 
 SANITY_CHECK_TOP_N = 5
+
+
+class DualLogMessage:
+    """Helper class to hold both truncated and full log messages."""
+
+    def __init__(self, truncated_msg: str, full_msg: str):
+        self.truncated_msg = truncated_msg
+        self.full_msg = full_msg
+
+    def __str__(self):
+        return self.truncated_msg
+
+
+class FullContentFormatter(logging.Formatter):
+    """Formatter that prefers full content from DualLogMessage if available."""
+
+    def format(self, record):
+        if isinstance(record.msg, DualLogMessage):
+            # Temporarily swap msg to full content
+            original_msg = record.msg
+            record.msg = record.msg.full_msg
+            # Format
+            s = super().format(record)
+            # Restore
+            record.msg = original_msg
+            return s
+        return super().format(record)
+
+
+def _log_list(
+    level: int,
+    header: str,
+    items: list,
+    item_formatter: Callable,
+    top_n: int = SANITY_CHECK_TOP_N,
+    footer_template: str = "  ... and {} more items.",
+    item_formatter_full: Callable | None = None,
+) -> None:
+    """Log a list of items with truncation for terminal but full content for file.
+
+    Args:
+        level: Logging level (e.g. logging.WARNING).
+        header: The header message.
+        items: List of items to log.
+        item_formatter: Function that takes an item and returns a string (for truncated view).
+        top_n: Number of items to show in truncated view.
+        footer_template: Template for the footer message when truncated. Must contain {}.
+        item_formatter_full: Optional function for full view. If None, uses item_formatter.
+    """
+    full_lines = [header]
+    trunc_lines = [header]
+
+    for i, item in enumerate(items):
+        line_trunc = item_formatter(item)
+        line_full = item_formatter_full(item) if item_formatter_full else line_trunc
+
+        full_lines.append(line_full)
+        if i < top_n:
+            trunc_lines.append(line_trunc)
+
+    if len(items) > top_n:
+        trunc_lines.append(footer_template.format(len(items) - top_n))
+
+    full_msg = "\n".join(full_lines)
+    trunc_msg = "\n".join(trunc_lines)
+
+    logger.log(level, DualLogMessage(trunc_msg, full_msg))
 
 
 def _read_idt_excel(order_excel: Path, robust: bool = True) -> pd.DataFrame:
@@ -247,12 +313,9 @@ def _build_amplicons(locate_final: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict] = []
 
     for tid, group in locate_final.groupby("transcript_id"):
-        g_fwd = group[group["primer_type"] == "fwd"]
-        g_rev = group[group["primer_type"] == "rev"]
-        # if g_fwd.empty or g_rev.empty:
-        #     continue
-        for _, rf in g_fwd.iterrows():
-            for _, rr in g_rev.iterrows():
+        # Perform self-pairwise comparison for all primers in the group
+        for i, rf in group.iterrows():
+            for j, rr in group.iterrows():
                 flipped = False
                 up, down = rf, rr
 
@@ -276,6 +339,8 @@ def _build_amplicons(locate_final: pd.DataFrame) -> pd.DataFrame:
                 amplicon = {
                     "primer_seq_fwd": rf["primer_seq"],
                     "primer_seq_rev": rr["primer_seq"],
+                    "primer_seq_fwd_type": rf["primer_type"],
+                    "primer_seq_rev_type": rr["primer_type"],
                     "transcript_id": tid,
                     "gene_id": up["gene_id"],
                     "gene_symbol": up["gene_symbol"],
@@ -297,6 +362,8 @@ def _build_amplicons(locate_final: pd.DataFrame) -> pd.DataFrame:
         spec = [
             ("primer_seq_fwd", "string"),
             ("primer_seq_rev", "string"),
+            ("primer_seq_fwd_type", "string"),
+            ("primer_seq_rev_type", "string"),
             ("transcript_id", "string"),
             ("gene_id", "string"),
             ("gene_symbol", "string"),
@@ -470,16 +537,13 @@ def _sanity_check_primer_duplicates(primer_seqs: list[str]) -> None:
     vc = pd.Series(primer_seqs).value_counts()
     duplicated_primers = vc[vc > 1]
     if not duplicated_primers.empty:
-        logger.warning(
-            "⚠️ %d duplicate primer sequences found:", len(duplicated_primers)
+        _log_list(
+            logging.WARNING,
+            f"⚠️ {len(duplicated_primers)} duplicate primer sequences found:",
+            list(duplicated_primers.items()),
+            lambda x: f"  - {x[0]}: {x[1]} occurrences",
+            footer_template="  ... and {} more duplicate sequences.",
         )
-        for seq, count in duplicated_primers.head(SANITY_CHECK_TOP_N).items():
-            logger.warning("  - %s: %d occurrences", seq, count)
-        if len(duplicated_primers) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more duplicate sequences.",
-                len(duplicated_primers) - SANITY_CHECK_TOP_N,
-            )
     else:
         logger.info("✅ All primer sequences are unique.")
 
@@ -496,22 +560,13 @@ def _sanity_check_primer_duplicates_with_type(primer_info: pd.DataFrame) -> None
     if duplicate_counts.empty:
         logger.info("✅ All primer sequences are unique with respect to primer type.")
     else:
-        logger.warning(
-            "⚠️ %d duplicate primer sequences with same type found:",
-            len(duplicate_counts),
+        _log_list(
+            logging.WARNING,
+            f"⚠️ {len(duplicate_counts)} duplicate primer sequences with same type found:",
+            [row for _, row in duplicate_counts.iterrows()],
+            lambda row: f"  - ({row['primer_type']}, {row['primer_seq']}): {row['counts']} occurrences",
+            footer_template="  ... and {} more duplicate sequences with same type.",
         )
-        for _, row in duplicate_counts.head(SANITY_CHECK_TOP_N).iterrows():
-            logger.warning(
-                "  - (%s, %s): %d occurrences",
-                row["primer_type"],
-                row["primer_seq"],
-                row["counts"],
-            )
-        if len(duplicate_counts) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more duplicate sequences with same type.",
-                len(duplicate_counts) - 10,
-            )
 
 
 def _sanity_check_seqkit_patterns(locate_df: pd.DataFrame) -> None:
@@ -527,17 +582,13 @@ def _sanity_check_seqkit_patterns(locate_df: pd.DataFrame) -> None:
     if multi_match_patterns.empty:
         logger.info("✅ All primers have one single match in the transcriptome.")
     else:
-        logger.warning(
-            "⚠️ %d primers have multiple matches in the transcriptome:",
-            len(multi_match_patterns),
+        _log_list(
+            logging.WARNING,
+            f"⚠️ {len(multi_match_patterns)} primers have multiple matches in the transcriptome:",
+            list(multi_match_patterns.items()),
+            lambda x: f"  - {x[0]}: {x[1]} matches",
+            footer_template="  ... and {} more patterns with multiple matches.",
         )
-        for pattern, count in multi_match_patterns.head(SANITY_CHECK_TOP_N).items():
-            logger.warning("  - %s: %d matches", pattern, count)
-        if len(multi_match_patterns) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more patterns with multiple matches.",
-                len(multi_match_patterns) - SANITY_CHECK_TOP_N,
-            )
 
 
 def _sanity_check_multi_location_binding(locate_df_final: pd.DataFrame) -> None:
@@ -551,25 +602,13 @@ def _sanity_check_multi_location_binding(locate_df_final: pd.DataFrame) -> None:
     if multi_bindings.empty:
         logger.info("✅ No primers bind to multiple locations on the same transcript.")
     else:
-        logger.warning(
-            "⚠️ Found %d instances of primers binding to multiple locations on the same transcript:",
-            len(multi_bindings),
+        _log_list(
+            logging.WARNING,
+            f"⚠️ Found {len(multi_bindings)} instances of primers binding to multiple locations on the same transcript:",
+            list(multi_bindings.items()),
+            lambda x: f"  - Primer {x[0][0]} binds to {x[1]} locations on transcript {x[0][1]}",
+            footer_template="  ... and {} more multi-location binding instances.",
         )
-        for (
-            (primer_seq, transcript_id),
-            count,
-        ) in multi_bindings.head(SANITY_CHECK_TOP_N).items():
-            logger.warning(
-                "  - Primer %s binds to %d locations on transcript %s",
-                primer_seq,
-                count,
-                transcript_id,
-            )
-        if len(multi_bindings) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more multi-location binding instances.",
-                len(multi_bindings) - SANITY_CHECK_TOP_N,
-            )
 
 
 def _sanity_check_multi_gene_binding(locate_df_final: pd.DataFrame) -> None:
@@ -582,33 +621,28 @@ def _sanity_check_multi_gene_binding(locate_df_final: pd.DataFrame) -> None:
     if multi_gene_bindings.empty:
         logger.info("✅ All primers bind to a single gene.")
     else:
-        logger.warning(
-            "⚠️ Found %d primers binding to multiple genes:", len(multi_gene_bindings)
-        )
-        for primer_seq, num_genes in multi_gene_bindings.head(
-            SANITY_CHECK_TOP_N
-        ).items():
+
+        def format_item(item, limit_genes=True) -> str:
+            primer_seq, num_genes = item
             genes = locate_df_final[locate_df_final["primer_seq"] == primer_seq][
                 "gene_id"
             ].unique()
-            # genes_str = ", ".join(genes[:5])
-            if len(genes) > SANITY_CHECK_TOP_N:
-                genes = genes[:SANITY_CHECK_TOP_N].tolist() + [
+            if limit_genes and len(genes) > SANITY_CHECK_TOP_N:
+                genes_display = genes[:SANITY_CHECK_TOP_N].tolist() + [
                     f"... and {len(genes) - SANITY_CHECK_TOP_N} more genes"
                 ]
             else:
-                genes = genes.tolist()
-            logger.warning(
-                "  - Primer %s binds to %d genes: %s",
-                primer_seq,
-                num_genes,
-                ", ".join(genes),
-            )
-        if len(multi_gene_bindings) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more multi-gene binding primers.",
-                len(multi_gene_bindings) - SANITY_CHECK_TOP_N,
-            )
+                genes_display = genes.tolist()
+            return f"  - Primer {primer_seq} binds to {num_genes} genes: {', '.join(genes_display)}"
+
+        _log_list(
+            logging.WARNING,
+            f"⚠️ Found {len(multi_gene_bindings)} primers binding to multiple genes:",
+            list(multi_gene_bindings.items()),
+            lambda item: format_item(item, limit_genes=True),
+            footer_template="  ... and {} more multi-gene binding primers.",
+            item_formatter_full=lambda item: format_item(item, limit_genes=False),
+        )
 
 
 def _sanity_check_sequence_lengths(locate_df_final: pd.DataFrame) -> None:
@@ -642,17 +676,13 @@ def _sanity_check_genes_per_primer_pair(amplicon_sub: pd.DataFrame) -> None:
     if multi_gene_pairs.empty:
         logger.info("✅ All primer pairs amplify a single gene.")
     else:
-        logger.warning(
-            "⚠️ %d primer pairs amplify more than one gene:",
-            len(multi_gene_pairs),
+        _log_list(
+            logging.WARNING,
+            f"⚠️ {len(multi_gene_pairs)} primer pairs amplify more than one gene:",
+            list(multi_gene_pairs.items()),
+            lambda x: f"  - {x[0][0]}/{x[0][1]}: {x[1]} genes",
+            footer_template="  ... and {} more multi-gene pairs.",
         )
-        for (fwd, rev), count in multi_gene_pairs.head(SANITY_CHECK_TOP_N).items():
-            logger.warning("  - %s/%s: %d genes", fwd, rev, count)
-        if len(multi_gene_pairs) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more multi-gene pairs.",
-                len(multi_gene_pairs) - SANITY_CHECK_TOP_N,
-            )
 
 
 def _sanity_check_amplicons_per_pair(amplicon_sub: pd.DataFrame) -> None:
@@ -671,17 +701,13 @@ def _sanity_check_amplicons_per_pair(amplicon_sub: pd.DataFrame) -> None:
     if multi_amplicons.empty:
         logger.info("✅ All primer pairs form a single amplicon.")
     else:
-        logger.warning(
-            "⚠️ %d primer pairs form multiple amplicons:",
-            len(multi_amplicons),
+        _log_list(
+            logging.WARNING,
+            f"⚠️ {len(multi_amplicons)} primer pairs form multiple amplicons:",
+            list(multi_amplicons.items()),
+            lambda x: f"  - {x[0][0]}/{x[0][1]}: {x[1]} amplicons",
+            footer_template="  ... and {} more multi-amplicon pairs.",
         )
-        for (fwd, rev), count in multi_amplicons.head(SANITY_CHECK_TOP_N).items():
-            logger.warning("  - %s/%s: %d amplicons", fwd, rev, count)
-        if len(multi_amplicons) > SANITY_CHECK_TOP_N:
-            logger.warning(
-                "  ... and %d more multi-amplicon pairs.",
-                len(multi_amplicons) - SANITY_CHECK_TOP_N,
-            )
 
 
 def _sanity_check_cross_pool_amplicons(amplicon_sub: pd.DataFrame) -> None:
@@ -737,10 +763,15 @@ def recover(
     output_report: Path | str | None = None,
     output_i5: Path | str | None = None,
     output_i7: Path | str | None = None,
+    output_locate_df: Path | str | None = None,
+    output_locate_df_final: Path | str | None = None,
+    output_amplicon_all: Path | str | None = None,
+    output_grouped: Path | str | None = None,
     *,
     amplicon_length_range: tuple[int, int] = (320, 380),
     threads: int = 1,
     simplify_gene_name: bool = True,
+    log_file: Path | str | None = None,
 ) -> pd.DataFrame:
     """Recover the primer summary from an IDT order Excel and a transcriptome FASTA.
 
@@ -757,10 +788,15 @@ def recover(
         has_linker: Whether the panel used the extra 6bp linker after NNNNNN (ACATCA/ATAGTT).
         output_order_excel: If provided, write the recovered summary to this Excel path.
         output_report: If provided, write a PDF report with sanity-check plots.
-        amplicon_length_range: Inclusive target amplicon length range used for filtering. 
+        amplicon_length_range: Inclusive target amplicon length range used for filtering.
             Use -1 to indicate no bound (e.g., (-1, 380) for no minimum, (320, -1) for no maximum).
         threads: Number of threads for `seqkit locate` (defaults to `os.cpu_count()`).
         simplify_gene_name: Whether to simplify gene names by removing redundant/uninformative tokens (default: True).
+        log_file: Path to a log file to write logs to.
+        output_locate_df: Path to save the raw locate_df.
+        output_locate_df_final: Path to save the enriched locate_df.
+        output_amplicon_all: Path to save the all amplicons dataframe (includes 'pass' column for filtering).
+        output_grouped: Path to save the grouped dataframe.
 
     Returns:
         A pandas DataFrame of the recovered summary with the following columns:
@@ -773,10 +809,31 @@ def recover(
         FileNotFoundError: If the resolved FASTA path does not exist.
         RuntimeError: If `seqkit` is missing or fails, or if internal joins fail.
     """
-    order_excel = Path(order_excel)
+    file_handler = None
+    if log_file:
+        log_path = Path(log_file)
+        # Overwrite if already exist
+        if log_path.exists():
+            log_path.unlink()
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(logging.INFO)
+        formatter = FullContentFormatter("%(asctime)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    order_excel = Path(order_excel).resolve()
+    logger.info(f"Amplicon length range: {amplicon_length_range}")
+    logger.info(f"Order Excel: {order_excel}")
+    if txome_fasta:
+        logger.info(f"Txome FASTA: {Path(txome_fasta).resolve()}")
+    else:
+        logger.info(f"Txome FASTA: {txome_fasta}")
+    logger.info(f"Species: {species}")
+    logger.info(f"Has linker: {has_linker}")
 
     # Resolve reference path
-    ref_path = resolve_reference_path(txome_fasta, species)
+    ref_path = resolve_reference_path(txome_fasta, species).resolve()
+    logger.info(f"Reference path: {ref_path}")
 
     # Prefixes
     fwd_prefix, rev_prefix = get_prefixes(has_linker)
@@ -797,35 +854,60 @@ def recover(
     )
     _sanity_check_seqkit_patterns(locate_df)
 
+    if output_locate_df:
+        locate_df.to_csv(output_locate_df, index=False)
+        logger.info(f"Saved locate_df to {Path(output_locate_df).resolve()}")
+
     # Enrich locate dataframe
     locate_df_final = _enrich_locate_df(locate_df, primer_info)
     _sanity_check_multi_location_binding(locate_df_final)
     _sanity_check_multi_gene_binding(locate_df_final)
     _sanity_check_sequence_lengths(locate_df_final)
 
+    if output_locate_df_final:
+        locate_df_final.to_csv(output_locate_df_final, index=False)
+        logger.info(f"Saved locate_df_final to {Path(output_locate_df_final).resolve()}")
+
     # Enumerate and filter amplicons
     amplicon_all = _build_amplicons(locate_df_final)
-
+    
+    # Add 'pass' column to indicate which amplicons pass filtering criteria
     lo, hi = amplicon_length_range
     
-    # Handle -1 as infinite bounds for filtering
+    # Apply length filtering
     if lo == -1 and hi == -1:
         # No filtering if both bounds are -1
-        amplicon_sub = amplicon_all.copy()
+        length_pass = True
     elif lo == -1:
         # No lower bound, only upper bound
-        amplicon_sub = amplicon_all[amplicon_all["amplicon_length"] <= hi].copy()
+        length_pass = amplicon_all["amplicon_length"] <= hi
     elif hi == -1:
         # No upper bound, only lower bound
-        amplicon_sub = amplicon_all[amplicon_all["amplicon_length"] >= lo].copy()
+        length_pass = amplicon_all["amplicon_length"] >= lo
     else:
         # Both bounds specified
-        amplicon_sub = amplicon_all[
-            amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
-        ].copy()
+        length_pass = amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
+    
+    # Apply primer type filtering (must be complementary fwd + rev)
+    type_pass = (
+        (amplicon_all["primer_seq_fwd_type"] == "fwd")
+        & (amplicon_all["primer_seq_rev_type"] == "rev")
+    )
+    
+    # Combine filters into 'pass' column
+    amplicon_all["pass"] = length_pass & type_pass
+    
+    if output_amplicon_all:
+        amplicon_all.to_csv(output_amplicon_all, index=False)
+        logger.info(f"Saved amplicon_all to {Path(output_amplicon_all).resolve()}")
+    
+    # Create subset for sanity checks (only passing amplicons)
+    amplicon_sub = amplicon_all[amplicon_all["pass"]].copy()
+
     _sanity_check_genes_per_primer_pair(amplicon_sub)
     _sanity_check_amplicons_per_pair(amplicon_sub)
     _sanity_check_cross_pool_amplicons(amplicon_sub)
+
     if output_report is not None:
         make_report(
             Path(output_report),
@@ -838,6 +920,10 @@ def recover(
     # Group per primer pair and construct final sheet
     grouped = _group_pairs(amplicon_sub)
     _sanity_check_primer_pair_relationships(grouped)
+
+    if output_grouped:
+        grouped.to_csv(output_grouped, index=False)
+        logger.info(f"Saved grouped to {Path(output_grouped).resolve()}")
 
     summary_df = _build_summary_df(grouped, fwd_prefix, rev_prefix, chosen_index=0)
 
@@ -862,13 +948,38 @@ def recover(
     # Write i5/i7 short FASTAs if output paths are provided
     if output_i5 is not None:
         SeqIO.write(i5_records, str(output_i5), "fasta")
+        logger.info(f"Saved i5 short FASTA to {Path(output_i5).resolve()}")
     if output_i7 is not None:
         SeqIO.write(i7_records, str(output_i7), "fasta")
+        logger.info(f"Saved i7 short FASTA to {Path(output_i7).resolve()}")
+
+    if file_handler:
+        logger.removeHandler(file_handler)
+        file_handler.close()
 
     return summary_df
 
 
 def collapse_to_id(series: pd.Series) -> str:
+    """Collapse a series of multi-mapping strings into a single ID string.
+
+    Extracts unique gene symbols from the multi-mapping strings (format:
+    "transcript|gene_id|gene_symbol|..."), sorts them, and joins with "|".
+
+    Args:
+        series: A pandas Series containing multi-mapping strings.
+
+    Returns:
+        A string with unique gene symbols joined by "|", or "_NA" if empty.
+
+    Example:
+        >>> s = pd.Series([
+        ...     "TX1|G1|GeneA|...;TX2|G1|GeneA|...",
+        ...     "TX3|G2|GeneB|..."
+        ... ])
+        >>> collapse_to_id(s)
+        'GeneA|GeneB'
+    """
     symbols: set[str] = set()
     # Gather unique symbols from "multi_mapping" entries across the group
     for multi in series.dropna().astype(str):
@@ -914,8 +1025,7 @@ def _create_fasta_records(
         .apply(
             lambda series: "|".join(
                 simplify_gene_list(
-                    collapse_to_id(series).split("|"), 
-                    collapse_families=True
+                    collapse_to_id(series).split("|"), collapse_families=True
                 )
             )
             if simplify_gene_name

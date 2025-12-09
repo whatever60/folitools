@@ -402,9 +402,6 @@ def read_counts(
     # rename columns to gene symbols if map provided
     if gtf:
         id2symbol = id2symbol_from_gencode_gtf(gtf)
-        import pdb
-
-        pdb.set_trace()
         matrix.columns = [
             "|".join(
                 simplify_gene_list(

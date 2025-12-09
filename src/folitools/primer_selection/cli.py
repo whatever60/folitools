@@ -234,6 +234,11 @@ def recover(
     output_report = output_dir / "primer_diagnose.pdf"
     output_i5 = output_dir / "i5_short.fasta"
     output_i7 = output_dir / "i7_short.fasta"
+    log_file = output_dir / "recover.log"
+    output_locate_df = output_dir / "locate_df.csv"
+    output_locate_df_final = output_dir / "locate_df_final.csv"
+    output_amplicon_all = output_dir / "amplicon_all.csv"
+    output_grouped = output_dir / "grouped.csv"
 
     _ = _recover(
         order_excel=order_excel,
@@ -247,6 +252,11 @@ def recover(
         amplicon_length_range=amplicon_length_range,
         threads=cores,
         simplify_gene_name=simplify_gene_name,
+        log_file=log_file,
+        output_locate_df=output_locate_df,
+        output_locate_df_final=output_locate_df_final,
+        output_amplicon_all=output_amplicon_all,
+        output_grouped=output_grouped,
     )
     return 0
 

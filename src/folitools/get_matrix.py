@@ -416,6 +416,7 @@ def read_counts(
             .groupby(level=0, sort=False)
             .mean()
             .transpose()
+            .round()
             .astype(int)
         )
     # reorder columns by average rel ab

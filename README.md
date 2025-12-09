@@ -305,6 +305,177 @@ Run tests with coverage:
 pytest --cov=src/folitools --cov-report=html
 ```
 
-## TODO
+## In silico amplification for primer pool evaluation
+
+Given a list of primer sequences used in foli-seq (with transcript-specific sequences, TruSeq R1/R2 overhang and with or without linker sequences), we validate the primer pool with de novo in silico PCR, without prior knowledge of the target genes, so that the upstream gene selection & panel design is decoupled from the evaluation here.
+
+This functionality helps you understand which genes are actually targeted by your primer pool and identify potential issues like off-target binding or missing amplicons.
+
+The workflow consists of the following steps:
+
+1.  **Primer parsing and classification**: The input IDT order Excel file (first two columns: pool name and primer sequence) is parsed to extract primer sequences. Each primer is classified as forward or reverse based on matching against known universal prefixes:
+    *   Forward: `ACACTCTTTCCCTACACGACGCTCTTCCGATCT` (TruSeq R1 adapter) + `NNNNNN` (UMI) + optional `ACATCA` linker
+    *   Reverse: `GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT` (TruSeq R2 adapter) + `NNNNNN` (UMI) + optional `ATAGTT` linker
+    
+    After classification, the universal prefix and UMI are stripped to extract the gene-specific targeting sequence for each primer.
+
+2.  **Transcriptome mapping**: Using `seqkit locate`, all gene-specific primer sequences are mapped against the provided transcriptome FASTA to identify where each primer can bind. This uses exact matching (no mismatches) to find all potential binding sites across all transcripts.
+
+3.  **Amplicon enumeration**: Forward and reverse primer hits are systematically paired on each transcript to enumerate all possible amplicons. For a valid amplicon:
+    *   Forward primer must match the transcript sequence (sense strand)
+    *   Reverse primer must match the reverse complement (antisense strand)
+    *   Primers must be on opposite strands with proper orientation
+    *   Forward primer position must be upstream of reverse primer position
+
+4.  **Amplicon filtering**: The enumerated amplicons are filtered based on:
+    *   Length constraints (default 320-380 bp, configurable via `--amplicon-length-range`)
+    *   Primer type validation (must be complementary R1 + R2 pair)
+    
+    Amplicons outside the target length range or with incorrect primer type combinations are excluded.
+
+5.  **Grouping and summarization**: Valid amplicons are grouped by unique primer pairs. For each pair, the function:
+    *   Aggregates all transcripts and genes that can be amplified
+    *   Detects multi-mapping primers (primers binding to multiple genes)
+    *   Checks for cross-pool amplicons (primer pair from different pools)
+    *   Creates a semicolon-separated list of all transcript mappings
+
+6.  **Gene name simplification** (optional, enabled by default): Gene symbols are processed to remove redundant information and improve readability. For example, gene families like "Gm12345" or immunoglobulin segments are consolidated to avoid cluttered names.
+
+### Output Files
+
+The command generates several output files in the specified output directory, saved in the order they are produced during the workflow:
+
+1.  **`locate_df.csv`**: Raw output from `seqkit locate`. Contains all matches of gene-specific primer sequences in the transcriptome. This is the unprocessed mapping result before any processing. Columns:
+    *   `seqID`: Transcript identifier from FASTA header (pipe-separated format)
+    *   `pattern`: The gene-specific primer sequence that was searched
+    *   `strand`: Strand orientation (`+` or `-`)
+    *   `start`, `end`: Starting and ending positions of match on transcript (1-based, inclusive)
+    *   `matched`: The actual matched sequence from the transcript
+
+2.  **`locate_df_final.csv`**: Processed version of `locate_df` with additional metadata joined from the primer info and parsed transcript/gene information. Columns are:
+    *   `primer_seq`, `primer_seq_full`: Gene-specific targeting sequence and complete primer (with universal prefix and UMI)
+    *   `primer_type`: Forward (`fwd`) or reverse (`rev`) classification
+    *   `transcript_id`, `gene_id`, `gene_symbol`: Transcript/gene identifiers parsed from seqID (indices 0, 1, and 5)
+    *   `start`, `end`: Starting and ending positions of match on transcript (1-based, inclusive)
+    *   `strand`: Strand orientation (`+` or `-`)
+    *   `pool`: Pool assignment from IDT order file
+    
+    This file shows where each primer can bind across the transcriptome with full biological context.
+
+3.  **`amplicon_all.csv`**: Complete enumeration of all possible amplicons formed by pairing forward and reverse primers on the same transcript. Each row represents one potential amplicon. Columns are:
+    *   `primer_seq_fwd`, `primer_seq_rev`: Forward and reverse primer gene-specific sequences
+    *   `primer_seq_fwd_type`, `primer_seq_rev_type`: Primer type classifications (should be `fwd` and `rev`)
+    *   `transcript_id`, `gene_id`, `gene_symbol`: Transcript and gene identifiers
+    *   `start_up`, `end_up`: Upstream (forward) primer binding site positions on transcript (1-based, inclusive)
+    *   `start_down`, `end_down`: Downstream (reverse) primer binding site positions on transcript (1-based, inclusive)
+    *   `pool_fwd`, `pool_rev`: Pool assignments for forward and reverse primers
+    *   `flipped`: Boolean indicating if primer pair orientation was flipped during enumeration
+    *   `amplicon_length`: Length of amplicon in base pairs (calculated as `end_down - start_up + 1`)
+    *   `pass`: Boolean indicating whether the amplicon passes filtering criteria (length range and complementary primer types)
+    
+    This includes all enumerated amplicons. Filter by `pass == True` to get only valid amplicons that would be expected in the actual experiment.
+
+4.  **`grouped.csv`**: Summary table where amplicons are grouped by unique primer pairs. Each row represents one primer pair with aggregated information across all its amplicons. Columns are:
+    *   `primer_seq_fwd`, `primer_seq_rev`: Forward and reverse primer gene-specific sequences
+    *   `transcript_id`, `gene_id`, `gene_symbol`: Representative transcript/gene identifiers (from first amplicon in group sorted by gene_id and transcript_id)
+    *   `start_up`, `end_up`: Forward primer binding site positions on representative transcript (1-based, inclusive)
+    *   `start_down`, `end_down`: Reverse primer binding site positions on representative transcript (1-based, inclusive)
+    *   `pool_fwd`, `pool_rev`: Pool assignments for forward and reverse primers
+    *   `num_transcripts`, `num_genes`: Number of unique transcripts and genes amplified by this primer pair
+    *   `transcript_id_all`: Semicolon-separated list of all transcript-gene mappings for this pair (format: `transcript_id|gene_id|gene_symbol|start_up|end_up|start_down|end_down|amplicon_length`)
+    
+    This shows the specificity of each primer pair, reveals multi-gene amplification, and provides detailed binding site information for each transcript target.
+
+5.  **`primer_diagnose.pdf`**: A diagnostic PDF report containing a log-log histogram of amplicon lengths across all enumerated amplicons, with vertical dashed lines indicating the target length range. This visualization helps identify the distribution of amplicon sizes and assess whether the specified range captures the intended products.
+
+6.  **`summary_primer_to_order.xlsx`**: Final Excel summary compatible with the primer design workflow format. Contains columns:
+    *   `Group`, `geneSymbol`, `geneID`: Default group assignment, gene symbol(s), and gene ID (without version)
+    *   `Chosen Index`, `amplicon_index`: Design index (default 0) and unique identifier (transcript ID without version + chosen index)
+    *   `L_seq`, `R_seq`: Forward/reverse primer display sequences (with linker, excluding universal prefix and UMI)
+    *   `primer_sequence_to_order_forward`, `primer_sequence_to_order_reverse`: Complete primer sequences as they appear in the order file (with universal prefix, UMI, and linker)
+    *   `L_pool`, `R_pool`: Pool assignments for forward and reverse primers
+    *   `multi_mapping`: Semicolon-separated list of all transcript-gene mappings (format: `transcript_id|gene_id|gene_symbol|start_up|end_up|start_down|end_down|amplicon_length`)
+
+7.  **`i5_short.fasta` & `i7_short.fasta`**: FASTA files containing gene-specific sequences for forward (i5) and reverse (i7) primers respectively. These sequences include any linker sequences but exclude the universal TruSeq adapters and UMIs. The number of records matches the number of unique primer sequences in the input order file. These files are suitable for use in downstream SADDLE analysis or dimer prediction.
+
+8.  **`recover.log`**: Detailed log file capturing all processing steps, sanity checks, and warnings. The log includes both truncated output (for readability) and full details for comprehensive debugging.
+
+### Primer Naming Convention
+
+In the output FASTA files (`i5_short.fasta` and `i7_short.fasta`), primer names (record IDs) are constructed based on the genes they amplify:
+
+*   **Single Gene Mapping**: If a primer sequence maps to only one gene (e.g., `GAPDH`), the record ID is simply the gene symbol: `GAPDH`.
+
+*   **Multi-Gene Mapping**: If a primer sequence maps to multiple genes, the record ID is a pipe-separated list of all unique gene symbols in sorted order. For example, a primer targeting both `GENE_A` and `GENE_B` would have ID: `GENE_A|GENE_B`.
+
+*   **Gene Name Simplification**: When `--simplify-gene-name` is enabled (default), redundant tokens in gene symbols are removed. For instance, if a primer maps to both `Ighv1-1` and `Ighv1-2`, these might be collapsed to a family representative like `Ighv1` to avoid overly long names.
+
+*   **ID Collision Resolution**: If multiple unique primer sequences map to the exact same set of genes (resulting in identical record IDs), a numeric suffix is automatically appended to distinguish them. For example: `GAPDH`, `GAPDH.1`, `GAPDH.2`. This ensures all primers are represented even when they target the same genes.
+
+*   **Missing Mappings**: Primers that don't form valid amplicons in the transcriptome are included in the FASTA with ID `_NA` to ensure completeness.
+
+### Gene Name List Consolidation
+
+When a primer maps to multiple genes, the gene name simplification feature (enabled by default with `--simplify-gene-name`) applies intelligent filtering rules to produce clean, informative primer names. The consolidation follows a two-stage process, controlled by the `collapse_families` argument (default: `True`). When `collapse_families=False`, only Stage 1 (pseudo-like filtering) is applied; otherwise, both stages are applied.
+
+#### Stage 1: Pseudo-like Gene Filtering
+
+The first stage identifies and removes "pseudo-like" gene symbols—names that are typically uninformative placeholders or annotation artifacts. A gene symbol is considered pseudo-like if it matches any of these patterns:
+
+*   **Database identifiers**: Ensembl gene IDs (e.g., `ENSG00000173366`, `ENSMUSG00000026193`)
+*   **Mouse gene models**: Placeholder names like `Gm10358`, `Gm3839`
+*   **RIKEN cDNA clones**: Mouse placeholders ending in `Rik` (e.g., `1700003D09Rik`)
+*   **Long non-coding RNA placeholders**: Patterns like `MMP24OS`, `FOXP3-AS1`, `LINC01234`, `AC123456.1`, `AL123456.1`, `RP11-...`
+*   **Explicit pseudogene markers**: Suffixes like `-ps`, `-rs`, or `RNAxxSPx` (e.g., `Clca4c-ps`, `Rn18s-rs5`, `RNA18SP5`)
+*   **Pseudogene patterns**: Genes ending in digits followed by `P` (e.g., `DEFA10P`, `CLCA3P`, `KRT8P1`)
+    *   Exception list protects real genes: `FOXP1-4`, `GBP1`, `ZBP1`, `GTPBP1`, `SPP1`, `DUSP1`, `AKAP1`, `TRAP1`, `RAMP1`
+*   **Paralog-like variants**: Patterns like `Klk1b1` where a base ending in a digit is followed by lowercase letters and more digits
+
+**Filtering rule**: If at least one non-pseudo-like gene symbol exists in the list, all pseudo-like symbols are dropped. If all symbols are pseudo-like, they are all retained to avoid losing all information.
+
+**Special cases**:
+*   **Mitochondrial genes** (prefixed with `MT-` or `mt-`) are always considered informative and kept
+*   **Readthrough genes** (format `GENE_A-GENE_B`) are dropped only if both component genes (`GENE_A` and `GENE_B`) also appear separately in the list; otherwise the readthrough symbol is kept as informative
+
+#### Stage 2: Family Collapsing
+
+After pseudo-like filtering, the second stage collapses gene family members with trivial suffix variants—but only when a clear base gene exists. This prevents overly verbose names while avoiding arbitrary choices:
+
+*   **Paralog families**: Patterns like `Klk1b1`, `Klk1b3`, `Klk1b11`, `Klk1b14-ps` are recognized as family members of base `Klk1`
+    *   Trivial tails must have form: `<base><lowercase_letters><digits>` or `<base><digits><lowercase_letters>`, optionally with `-ps` suffix
+    *   Base must be at least 4 characters long
+*   **Pseudogene families**: Patterns like `KRT8P1`, `KRT8P2` are recognized as pseudogene variants of base `KRT8`
+    *   Pattern: `<base_ending_in_digit>P<digits>`
+
+**Collapsing rule**: Family members are collapsed **only if the base gene is present** in the list. For example:
+*   `["Klk1", "Klk1b1", "Klk1b3"]` → `["Klk1"]` (base present, collapse all variants)
+*   `["Klk1b1", "Klk1b3"]` → `["Klk1b1", "Klk1b3"]` (base absent, keep both variants separately)
+*   `["Selenbp1", "Selenbp2"]` → `["Selenbp1", "Selenbp2"]` (these are distinct paralogs, not trivial variants)
+
+This conservative approach ensures that family members are only merged when there's clear evidence (presence of the base gene) that they represent variants of the same functional unit, avoiding silent loss of information.
+
+#### Examples
+
+*   `["GAPDH", "ENSG00000111640"]` → `["GAPDH"]` (Ensembl ID dropped)
+*   `["Ppp1r1b", "1700003D09Rik"]` → `["Ppp1r1b"]` (RIKEN clone dropped)
+*   `["DEFA1", "DEFA10P"]` → `["DEFA1"]` (pseudogene dropped)
+*   `["Klk1", "Klk1b1", "Klk1b11", "Klk1b3"]` → `["Klk1"]` (family collapsed to base)
+*   `["KRT8P1", "KRT8P2"]` → `["KRT8P1", "KRT8P2"]` (no base `KRT8`, so keep both)
+*   `["IFNAR2-IL10RB"]` → `["IFNAR2-IL10RB"]` (readthrough kept when components absent)
+*   `["KLRC4-KLRK1", "KLRK1"]` → `["KLRK1"]` (readthrough dropped when component present)
+
+This simplification is applied when constructing FASTA record IDs from multi-gene mappings, making primer names more concise and biologically meaningful while preserving essential information.
+
+## Understanding Amplicon Counting Output
+
+Foli-seq's amplicon-based design produces count matrices with feature names that differ from traditional bulk RNA-seq or scRNA-seq outputs. Because the protocol uses targeted primers that can amplify multiple transcripts (due to gene family similarity) and multiple primers can target the same transcript, the feature naming reflects both transcript identity and multi-mapping relationships.
+
+During the pipeline, feature names evolve through several stages. When `cutadapt` identifies primer adapters in step 2, primer names are embedded into read names (e.g., `@READ_ID_ACGTAC_TGCATG_FGR+FGR`), creating amplicon-specific identifiers. In step 3, `featureCounts` assigns reads to gene features and stores results in the `XT` tag—either single genes (`XT:Z:ENSG00000010030`) or comma-separated lists for multi-mapping reads (`XT:Z:ENSG00000010030,ENSG00000285441`). The pipeline then combines these gene assignments with primer information to create composite features in the `XF` tag, such as `ENSG00000010030,FGR+FGR` (single gene amplified by FGR primers) or `ENSG00000010030,ENSG00000285441,FGR+FGR` (multi-mapping).
+
+`umi_tools group` deduplicates reads by grouping on UMI sequence, cell barcode, and the gene-with-primer assignment from the `XF` tag. Finally, the `read_counts` function aggregates these amplicon-level counts to transcript-level by stripping primer suffixes from feature names. When multiple primer pairs target the same transcript, their counts are averaged. Multi-mapping reads remain as pipe-separated features (e.g., `GENE_A|GENE_B`). If a GTF file is provided, gene IDs are converted to symbols while preserving multi-mapping relationships (e.g., `ENSG00000010030` → `FGR`, or `ENSG00000111|ENSG00000222` → `Klk1b1|Klk1b3`). For multi-gene features, the same gene name simplification logic described in the "Gene Name List Consolidation" section above is applied to remove pseudo-like genes and collapse family variants, ensuring consistent naming between primer pool validation and count matrix generation.
+
+In summary, the resulting count matrix has samples as rows and transcript features as columns. Single-mapping transcripts appear as simple gene symbols (`FGR`, `GAPDH`), while multi-mapping gene families are indicated with pipe-separated names (`BCL9L|CXCR5`). Thus, the values represent UMI-deduplicated read counts where each UMI corresponds to one original mRNA molecule, and multiple amplicons targeting the same transcript are averaged. This design handles amplicon multiplicity through count aggregation and preserves biological ambiguity due to sequence similarity, providing transcript-level quantification suitable for differential expression analysis.
+
+## TODOs
 
 - Add QC report code that summarizes all metrics into a table (need refactoring)

@@ -14,7 +14,7 @@ from Bio.SeqRecord import SeqRecord
 
 # Local imports
 from .recover_plot import make_report
-from .utils import get_prefixes, resolve_reference_path
+from .utils import get_prefixes, resolve_reference_path, LINKER1, LINKER2
 from .recover_utils import simplify_gene_list
 
 
@@ -314,8 +314,10 @@ def _build_amplicons(locate_final: pd.DataFrame) -> pd.DataFrame:
 
     for tid, group in locate_final.groupby("transcript_id"):
         # Perform self-pairwise comparison for all primers in the group
-        for i, rf in group.iterrows():
-            for j, rr in group.iterrows():
+        for i, (_, rf) in enumerate(group.iterrows()):
+            for j, (_, rr) in enumerate(group.iterrows()):
+                if i > j:
+                    continue
                 flipped = False
                 up, down = rf, rr
 
@@ -830,6 +832,7 @@ def recover(
         logger.info(f"Txome FASTA: {txome_fasta}")
     logger.info(f"Species: {species}")
     logger.info(f"Has linker: {has_linker}")
+    logger.info(f"Simplify gene name: {simplify_gene_name}")
 
     # Resolve reference path
     ref_path = resolve_reference_path(txome_fasta, species).resolve()
@@ -875,18 +878,11 @@ def recover(
     lo, hi = amplicon_length_range
     
     # Apply length filtering
-    if lo == -1 and hi == -1:
-        # No filtering if both bounds are -1
-        length_pass = True
-    elif lo == -1:
-        # No lower bound, only upper bound
-        length_pass = amplicon_all["amplicon_length"] <= hi
-    elif hi == -1:
-        # No upper bound, only lower bound
-        length_pass = amplicon_all["amplicon_length"] >= lo
-    else:
-        # Both bounds specified
-        length_pass = amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
+    if lo == -1:
+        lo = float("-inf")
+    if hi == -1:
+        hi = float("inf")
+    length_pass = amplicon_all["amplicon_length"].between(lo, hi, inclusive="both")
     
     # Apply primer type filtering (must be complementary fwd + rev)
     type_pass = (
@@ -936,12 +932,12 @@ def recover(
     # Create SeqRecord lists for i5/i7 short FASTAs
     i5_records = _create_fasta_records(
         summary_df.set_index("L_seq")["multi_mapping"],
-        primer_seqs_fwd,
+        [LINKER1 + p if has_linker else p for p in primer_seqs_fwd],
         simplify_gene_name=simplify_gene_name,
     )
     i7_records = _create_fasta_records(
         summary_df.set_index("R_seq")["multi_mapping"],
-        primer_seqs_rev,
+        [LINKER2 + p if has_linker else p for p in primer_seqs_rev],
         simplify_gene_name=simplify_gene_name,
     )
 

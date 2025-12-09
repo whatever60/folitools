@@ -15,6 +15,11 @@ SPECIES_FASTA_NAME: dict[str, str] = {
     "human": "Homo_sapiens.GRCh38.transcript.fasta.gz",
 }
 
+R1 = "CCTACACGACGCTCTTCCGATCT"
+R2 = "TCAGACGTGTGCTCTTCCGATCT"
+LINKER1 = "ACATCA"
+LINKER2 = "ATAGTT"
+
 
 def get_prefixes(has_linker: bool) -> tuple[str, str]:
     """Return (forward_prefix, reverse_prefix) depending on linker usage.
@@ -28,11 +33,11 @@ def get_prefixes(has_linker: bool) -> tuple[str, str]:
         Tuple of (forward_prefix, reverse_prefix) strings.
     """
     if has_linker:
-        fwd = "CCTACACGACGCTCTTCCGATCTNNNNNNACATCA"
-        rev = "TCAGACGTGTGCTCTTCCGATCTNNNNNNATAGTT"
+        fwd = R1 + "NNNNNN" + LINKER1
+        rev = R2 + "NNNNNN" + LINKER2
     else:
-        fwd = "CCTACACGACGCTCTTCCGATCTNNNNNN"
-        rev = "TCAGACGTGTGCTCTTCCGATCTNNNNNN"
+        fwd = R1 + "NNNNNN"
+        rev = R2 + "NNNNNN"
     return fwd, rev
 
 

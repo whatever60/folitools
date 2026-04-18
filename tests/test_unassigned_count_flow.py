@@ -1,6 +1,7 @@
 """Tests for unassigned BAM tagging and count-matrix filtering."""
 
 from pathlib import Path
+import tomllib
 
 import pandas as pd
 import pysam
@@ -90,6 +91,8 @@ def test_get_count_mtx_writes_package_version_header(tmp_path: Path) -> None:
     """The exported matrix should stamp the package version in the first cell."""
     group_tsv = tmp_path / "sample.group.tsv"
     output_tsv = tmp_path / "foli_counts.tsv"
+    with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as f:
+        project_version = tomllib.load(f)["project"]["version"]
     pd.DataFrame(
         {
             "read_id": ["read1"],
@@ -106,4 +109,5 @@ def test_get_count_mtx_writes_package_version_header(tmp_path: Path) -> None:
 
     get_count_mtx(input_=[str(group_tsv)], output=str(output_tsv))
 
-    assert output_tsv.read_text().splitlines()[0] == f"folitools {__version__}\tGENE1"
+    assert __version__ == project_version
+    assert output_tsv.read_text().splitlines()[0] == f"folitools {project_version}\tGENE1"

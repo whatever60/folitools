@@ -5,7 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pysam
 
+from folitools import __version__
 from folitools.add_tags import add_tags_wo_fastq
+from folitools.cli import get_count_mtx
 from folitools.get_matrix import read_counts
 
 
@@ -82,3 +84,26 @@ def test_read_counts_filters_unassigned_gene_prefix(tmp_path: Path) -> None:
 
     assert list(matrix.columns) == ["GENE1"]
     assert matrix.iloc[0, 0] == 1
+
+
+def test_get_count_mtx_writes_package_version_header(tmp_path: Path) -> None:
+    """The exported matrix should stamp the package version in the first cell."""
+    group_tsv = tmp_path / "sample.group.tsv"
+    output_tsv = tmp_path / "foli_counts.tsv"
+    pd.DataFrame(
+        {
+            "read_id": ["read1"],
+            "contig": ["chr1"],
+            "position": [100],
+            "gene": ["GENE1,FGR+FGR"],
+            "umi": ["AAAAAATTTTTT"],
+            "umi_count": [1],
+            "final_umi": ["AAAAAATTTTTT"],
+            "final_umi_count": [1],
+            "unique_id": ["0"],
+        }
+    ).to_csv(group_tsv, sep="\t", index=False)
+
+    get_count_mtx(input_=[str(group_tsv)], output=str(output_tsv))
+
+    assert output_tsv.read_text().splitlines()[0] == f"folitools {__version__}\tGENE1"

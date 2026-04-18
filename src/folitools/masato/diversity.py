@@ -36,7 +36,11 @@ def _rarefy_array(arr: np.ndarray, n: int, k: int, seed: int = 42) -> np.ndarray
 
 
 def _rarefy(
-    df: pd.DataFrame, ref: list[int], repeat_num: int = 20, cores: int = 4
+    df: pd.DataFrame,
+    ref: list[int],
+    repeat_num: int = 20,
+    cores: int = 4,
+    seed: int = 42,
 ) -> tuple[pd.DataFrame, list]:
     """Rarefy each sample in a count table to its corresponding target depth.
 
@@ -47,6 +51,7 @@ def _rarefy(
         repeat_num: Number of rarefaction repeats for samples that need to be
             downsampled.
         cores: Number of worker threads used to process rows in parallel.
+        seed: Seed used to deterministically generate one random seed per row.
 
     Returns:
         A tuple ``(df_rarefied, original_names)``. ``df_rarefied`` contains the
@@ -66,10 +71,13 @@ def _rarefy(
         )
 
     values = df.to_numpy()
+    rng = np.random.default_rng(seed=seed)
+    row_seeds = rng.integers(0, np.iinfo(np.int64).max, size=len(df), dtype=np.int64)
 
     # get a list of 2d numpy array using joblib parallisim
     res = Parallel(n_jobs=cores, prefer="threads")(
-        delayed(_rarefy_array)(values[idx], n, repeat_num) for idx, n in enumerate(ref)
+        delayed(_rarefy_array)(values[idx], n, repeat_num, seed=int(row_seeds[idx]))
+        for idx, n in enumerate(ref)
     )
     assert isinstance(res, list)
     sample_names_new_orig = [
@@ -89,6 +97,7 @@ def rarefy(
     rarefying_value: None | int = None,
     rarefying_key: None | str = None,
     cores: int = 4,
+    seed: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Rarefy an OTU count table and expand metadata to match the new rows.
 
@@ -107,6 +116,7 @@ def rarefy(
             depth should be used. Integer values are treated as explicit target
             depths. Missing values fall back to ``rarefying_value``.
         cores: Number of worker threads used during rarefaction.
+        seed: Seed used to make rarefaction reproducible across runs.
 
     Returns:
         A tuple ``(df_otu_count_rarefied, df_meta_rarefied)``. When rarefaction
@@ -155,7 +165,7 @@ def rarefy(
 
         # rarefy
         df_otu_count, names_orig = _rarefy(
-            df_otu_count, ref, rarefying_repeat, cores=cores
+            df_otu_count, ref, rarefying_repeat, cores=cores, seed=seed
         )
         # NOTE:
         # Must create the dummy dataframe as a column, cannot be empty dataframe

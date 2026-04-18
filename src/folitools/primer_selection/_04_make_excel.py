@@ -103,9 +103,13 @@ def summary(
     """
     selection = pd.read_table(primer_selection)
     primer_info_df = pd.read_table(primer_info)
-    df_gene = pd.read_table(input_).rename(
-        {"group": "Group", "gene": "geneSymbol"}, axis=1
-    )
+    df_gene = pd.read_table(input_)
+    df_gene = df_gene.rename({"gene": "geneSymbol"}, axis=1)
+
+    if "group" in df_gene.columns:
+        df_gene = df_gene.rename({"group": "Group"}, axis=1)
+    else:
+        df_gene["Group"] = "default"
 
     # primer_info["amplicon_index"].is_unique, selection["primerIndex"].is_unique
 

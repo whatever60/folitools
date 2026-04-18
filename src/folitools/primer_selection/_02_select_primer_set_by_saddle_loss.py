@@ -494,9 +494,11 @@ def saddle(
         primers=primers_init,
         tail2weight=tail2weight,
         primer2tail_score=primer2tail_score,
-    ) + calc_saddle_self_loss(
+    )
+    current_self_loss = calc_saddle_self_loss(
         old_primers=[], new_primers=primers_init, primer2selfloss_table=primer2selfloss
     )
+    current_saddle_loss += current_self_loss
     list_saddle_loss = [current_saddle_loss]
 
     print("Start simulated annealing...")
@@ -521,15 +523,17 @@ def saddle(
             primer2tailrc_weight=primer2tailrc_weight,
         )
 
-        candidate_loss = calc_saddle_by_hash(
-            primers=generate_primer_seq(genes, primer_info_pool, new_primer_used),
-            tail2weight=tail2weight,
-            primer2tail_score=primer2tail_score,
-        ) + calc_saddle_self_loss(
+        candidate_self_loss = current_self_loss + calc_saddle_self_loss(
             old_primers=cur_primer_seq,
             new_primers=new_primer_seq,
             primer2selfloss_table=primer2selfloss,
         )
+
+        candidate_loss = calc_saddle_by_hash(
+            primers=generate_primer_seq(genes, primer_info_pool, new_primer_used),
+            tail2weight=tail2weight,
+            primer2tail_score=primer2tail_score,
+        ) + candidate_self_loss
 
         loss_diff = candidate_loss - current_saddle_loss
         if loss_diff < 0 or (
@@ -542,6 +546,7 @@ def saddle(
 
         if accept:  # Accept, sync the change
             current_saddle_loss = candidate_loss
+            current_self_loss = candidate_self_loss
             current_primer_used = new_primer_used
         else:  # Do not accept, reverse the change
             update_tail_weight(

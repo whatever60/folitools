@@ -43,8 +43,8 @@ User-supplied TSV
 Gene table TSV (required by the CLI):
   Required columns:
     - gene   : gene symbol (unique preferred)
-    - group  : arbitrary grouping/annotation
   Optional columns:
+    - group      : arbitrary grouping/annotation
     - primer_fwd : explicit forward primer to enforce
     - primer_rev : explicit reverse primer to enforce
 
@@ -72,8 +72,8 @@ def read_gene_metadata(file_path: Path) -> pd.DataFrame:
     """Read the gene table TSV with optional explicit primer pairs.
 
     Args:
-        file_path: Path to a TSV containing at least columns ``gene`` and ``group``.
-            Optional columns: ``primer_fwd``, ``primer_rev``.
+        file_path: Path to a TSV containing at least column ``gene``.
+            Optional columns: ``group``, ``primer_fwd``, ``primer_rev``.
 
     Returns:
         A pandas DataFrame of the gene table.
@@ -82,7 +82,7 @@ def read_gene_metadata(file_path: Path) -> pd.DataFrame:
         ValueError: If required columns are missing.
     """
     df = pd.read_csv(file_path, sep="\t")
-    required = {"gene", "group"}
+    required = {"gene"}
     if not required.issubset(df.columns):
         raise ValueError(f"Gene table must contain columns: {required}")
     return df
@@ -234,7 +234,8 @@ def subset(
     Args:
         species: Species name driving packaged input discovery (e.g., "mouse").
         amplicon_size_range: Range like "320-380" (also accepts "320:380").
-        gene_table_file: Path to the user TSV with columns ``gene`` and ``group``,
+        gene_table_file: Path to the user TSV with column ``gene``,
+            optionally ``group``,
             optionally ``primer_fwd`` and ``primer_rev``.
         output_primer_info: Path to write primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
 

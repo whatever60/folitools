@@ -18,3 +18,23 @@ dependencies:
   - subread
   - sambamba
   - pigz
+  - scanpy
+  - rpy2
+  - r-base>=4
+  - r-essentials
+  - r-irkernel
+  - r-biocmanager  # For installing non-conda R packages
+  - r-devtools  # For installing non-conda R packages
+  - bioconductor-deseq2
+  - bioconductor-sva
+  - bioconductor-edgeR
+  - bioconductor-limma
+  - bioconductor-batchqc
+  - bioconductor-toast  # dependency for MuSiC
+  - r-rcurl  # dependency for BayesPrism
+  - autogenes
+  - xbioc  # dependency for SCDC
+  - r-bisquerna
+  # - r-bseqsc  # Dependencies too old
+  - bioconductor-deconrnaseq
+  - r-dwls

@@ -6,6 +6,7 @@ import os
 
 from cyclopts import App, Parameter
 
+from . import __version__
 from .get_matrix import read_counts
 from .primer_info import get_read_stats
 from .utils import expand_path_to_list
@@ -230,7 +231,7 @@ def get_count_mtx(
         raise ValueError(
             f"Output file must end with .tsv, .txt, .tsv.gz, or .txt.gz: {output!r}"
         )
-    df.to_csv(output, sep=sep, index_label="gene", header=True)
+    df.to_csv(output, sep=sep, index_label=f"folitools {__version__}", header=True)
 
 
 @app.command(help="Get read statistics from FASTQ files after primer assignment")

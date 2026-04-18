@@ -61,6 +61,7 @@ from cyclopts import App
 
 from ._01_primer_selection import subset as _subset
 from ._02_select_primer_set_by_saddle_loss import saddle as _saddle
+from ._02_select_primer_set_by_sgad import sgad as _sgad
 from ._03_extract_region_sequence import product as _product
 from ._04_make_excel import summary as _summary
 from ._05_recover import recover as _recover
@@ -127,6 +128,61 @@ def saddle(
         output_loss=output_loss,
         num_cycles_anneal=num_cycles_anneal,
         random_seed=random_seed,
+        background_fasta=background_fasta,
+    )
+    return 0
+
+
+@app.command
+def sgad(
+    *,
+    input_: Path,
+    output: Path,
+    output_loss: Path,
+    num_cycles_anneal: int = 50,
+    random_seed: int = 42,
+    at_match: float,
+    gc_match: float,
+    mismatch: float,
+    gap_open: float,
+    gap_extend: float,
+    decay_exponent: float,
+    temperature: float,
+    background_fasta: Path | None = None,
+) -> int:
+    """Run SGAD-backed SA to choose a low-dimer primer set.
+
+    Args:
+        input_: TSV of candidate primers (gene, design, seq_f, seq_r).
+        output: TSV path to write final chosen primers.
+        output_loss: TSV path to write SGAD-loss trajectory (no header).
+        num_cycles_anneal: Annealing iterations.
+        random_seed: RNG seed for reproducibility.
+        at_match: Match score for A/T aligned positions.
+        gc_match: Match score for G/C aligned positions.
+        mismatch: Mismatch score for non-matching aligned positions.
+        gap_open: Gap-open penalty.
+        gap_extend: Gap-extension penalty.
+        decay_exponent: SGAD score-scaling decay exponent.
+        temperature: SGAD score-scaling temperature (> 0).
+        background_fasta: Optional FASTA file with additional primers to include in the pool.
+
+    Returns:
+        Process exit code.
+    """
+    _ = _sgad(
+        input_=input_,
+        output=output,
+        output_loss=output_loss,
+        num_cycles_anneal=num_cycles_anneal,
+        random_seed=random_seed,
+        at_match=at_match,
+        gc_match=gc_match,
+        mismatch=mismatch,
+        gap_open=gap_open,
+        gap_extend=gap_extend,
+        decay_exponent=decay_exponent,
+        temperature=temperature,
         background_fasta=background_fasta,
     )
     return 0

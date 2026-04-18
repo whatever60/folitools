@@ -65,8 +65,16 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 # keep local data out of built dists
-wheel-exclude  = ["src/folitools/primer_selection/data/**"]
-source-exclude = ["src/folitools/primer_selection/data/**"]
+wheel-exclude  = [
+    "src/folitools/primer_selection/data/**",
+    "c/**",
+    "rust/**",
+]
+source-exclude = [
+    "src/folitools/primer_selection/data/**",
+    "c/**",
+    "rust/**",
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

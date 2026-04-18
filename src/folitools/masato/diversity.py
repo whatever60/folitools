@@ -4,35 +4,60 @@ from joblib import Parallel, delayed
 
 
 def _rarefy_array(arr: np.ndarray, n: int, k: int, seed: int = 42) -> np.ndarray:
-    """Rarefy one row k times so that each row sum up to n."""
+    """Rarefy one sample-level count vector.
+
+    Args:
+        arr: One-dimensional count vector for a single sample.
+        n: Target sequencing depth after rarefaction.
+        k: Number of independent rarefaction repeats to generate.
+        seed: Seed used to initialize the NumPy random number generator.
+
+    Returns:
+        A 2D array with one rarefied count vector per row. The output shape is
+        ``(k, arr.size)`` when rarefaction is performed. If ``n`` is greater
+        than or equal to the observed depth, the original counts are returned
+        once with shape ``(1, arr.size)``.
+    """
     depth = arr.sum()
     rng = np.random.default_rng(seed=seed)
     if n >= depth:  # don't rarefy if expected depth is larger than the actual depth.
         return arr.reshape(1, -1)
-    all_elements = np.repeat(np.arange(arr.size), arr)
-    return np.stack(
-        [
-            np.bincount(
-                rng.choice(all_elements, size=n, replace=False), minlength=arr.size
-            )
-            for _ in range(k)
-        ],
-        axis=0,
-    )
+    # all_elements = np.repeat(np.arange(arr.size), arr)
+    # return np.stack(
+    #     [
+    #         np.bincount(
+    #             rng.choice(all_elements, size=n, replace=False), minlength=arr.size
+    #         )
+    #         for _ in range(k)
+    #     ],
+    #     axis=0,
+    # )
+    return rng.multivariate_hypergeometric(arr, n, size=k)
 
 
 def _rarefy(
-    df: pd.DataFrame, ref: list[int], repeat_num: int = 20
+    df: pd.DataFrame, ref: list[int], repeat_num: int = 20, cores: int = 4
 ) -> tuple[pd.DataFrame, list]:
-    """Rarefy the dataframe to the reference list or integer.
+    """Rarefy each sample in a count table to its corresponding target depth.
 
-    The input dataframe should be sample x features, with sample name as index.
+    Args:
+        df: Count table with samples in rows and features in columns.
+        ref: Target rarefaction depth for each row in ``df``. Must have the
+            same length as ``df``.
+        repeat_num: Number of rarefaction repeats for samples that need to be
+            downsampled.
+        cores: Number of worker threads used to process rows in parallel.
 
-    In the returned output, each sample in the input dataframe will be rarefied
-    `repeat_num` times, resulting in a dataframe with shape (sample x features x
-    repeat_num), except for samples whose reference is themselves, which will be
-    repeated only once. Sample name in the returned output will be like
-    <original_sample_name>_rarefied_<repeat_num>.
+    Returns:
+        A tuple ``(df_rarefied, original_names)``. ``df_rarefied`` contains the
+        rarefied count table with row names in the form
+        ``<sample_name>_rarefied_<repeat_index>``. Samples whose target depth is
+        greater than or equal to their observed depth appear only once.
+        ``original_names`` records the original sample name for each returned
+        row, in the same order as ``df_rarefied``.
+
+    Raises:
+        ValueError: If ``ref`` does not have the same length as ``df``.
     """
     # make sure all columns in df are positive integers and are in ref.
     if not len(ref) == len(df):
@@ -40,10 +65,11 @@ def _rarefy(
             "The length of ref should be the same as the number of rows in df."
         )
 
+    values = df.to_numpy()
+
     # get a list of 2d numpy array using joblib parallisim
-    res = Parallel(n_jobs=4)(
-        delayed(_rarefy_array)(df.iloc[idx].to_numpy(), n, repeat_num)
-        for idx, n in enumerate(ref)
+    res = Parallel(n_jobs=cores, prefer="threads")(
+        delayed(_rarefy_array)(values[idx], n, repeat_num) for idx, n in enumerate(ref)
     )
     assert isinstance(res, list)
     sample_names_new_orig = [
@@ -62,7 +88,38 @@ def rarefy(
     rarefying_repeat: int = 0,
     rarefying_value: None | int = None,
     rarefying_key: None | str = None,
+    cores: int = 4,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Rarefy an OTU count table and expand metadata to match the new rows.
+
+    Args:
+        df_otu_count: OTU count table with samples in rows and features in
+            columns.
+        df_meta: Metadata table indexed by sample name.
+        rarefying_repeat: Number of rarefaction repeats to generate for each
+            sample when rarefaction is enabled. Rarefaction is skipped when this
+            value is less than or equal to 1.
+        rarefying_value: Default target depth used when ``rarefying_key`` does
+            not provide a per-sample reference. If not provided, the default is
+            one less than the minimum observed sample depth.
+        rarefying_key: Column in ``df_meta`` that defines the rarefaction
+            target for each sample. String values refer to another sample whose
+            depth should be used. Integer values are treated as explicit target
+            depths. Missing values fall back to ``rarefying_value``.
+        cores: Number of worker threads used during rarefaction.
+
+    Returns:
+        A tuple ``(df_otu_count_rarefied, df_meta_rarefied)``. When rarefaction
+        is enabled, both outputs are expanded so that repeated rarefied samples
+        and their metadata stay aligned. When rarefaction is disabled, the
+        original inputs are returned unchanged.
+
+    Raises:
+        ValueError: If ``rarefying_key`` refers to a sample name that is not
+            present in ``df_otu_count``.
+        ValueError: If a value in ``rarefying_key`` is neither a string, an
+            integer, nor a missing value.
+    """
     if rarefying_repeat > 1:
         # Rarefying takes place by the following order:
         # - When rarefying_key is specified:
@@ -97,7 +154,9 @@ def rarefy(
                 )
 
         # rarefy
-        df_otu_count, names_orig = _rarefy(df_otu_count, ref, rarefying_repeat)
+        df_otu_count, names_orig = _rarefy(
+            df_otu_count, ref, rarefying_repeat, cores=cores
+        )
         # NOTE:
         # Must create the dummy dataframe as a column, cannot be empty dataframe
         # with index, otherwise order of merged dataframe index will be slightly

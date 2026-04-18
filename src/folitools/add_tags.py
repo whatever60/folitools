@@ -50,6 +50,7 @@ def add_tags_wo_fastq(
         raise ValueError("Output file must end with .bam or .sam")
 
     def process_and_write_pair():
+        """Write the current primary read pair with a gene-with-primer tag."""
         if len(primary_alignments) != 2:
             msg = f"Expected 2 primary alignments, got {len(primary_alignments)}"
             msg += f" (current read: {read_id}, next read: {query_name_current})"
@@ -61,11 +62,13 @@ def add_tags_wo_fastq(
         }
         if genes:
             gene_with_primer = ",".join(sorted(genes) + [primers])
-            for r, read in primary_alignments:
-                read.set_tag(
-                    gene_with_primer_tag_name, gene_with_primer, value_type="Z"
-                )
-                bam_out.write(read)
+        else:
+            gene_with_primer = ",".join(["Unassigned", primers])
+        for r, read in primary_alignments:
+            read.set_tag(
+                gene_with_primer_tag_name, gene_with_primer, value_type="Z"
+            )
+            bam_out.write(read)
 
     with (
         # NOTE: pysam read can handle both BAM and SAM format automatically if opened with "rb".

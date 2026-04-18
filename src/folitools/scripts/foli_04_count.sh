@@ -90,11 +90,11 @@ for bam in "${bams[@]}"; do
         --chimeric-pairs output \
         --unpaired-reads output \
         --no-sort-output \
+        --skip-tags-regex "(?!)" \
         --group-out "$COUNTS_DIR/${sample_name}.group.tsv.gz" \
         --stdin $bam \
         --log2stderr \
         2> "$COUNTS_DIR/${sample_name}.group.log"
-        # --skip-tags-regex "(?!)" \
         # | sambamba sort \
         #     --nthreads "$((THREADS-1))" \
         #     --memory-limit 16GB \

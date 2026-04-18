@@ -1,5 +1,16 @@
 
 notebooks/
+.codex
+data_temp/
+fastq_fastqc/
+fastp/
+fastp_fastqc/
+rest_all/
+rest_all_stats/
+featurecounts/
+star/
+counts/
+foli_counts.tsv
 
 # Python-generated files
 __pycache__/

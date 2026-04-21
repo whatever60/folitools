@@ -8,13 +8,14 @@ source "$script_dir/utils.sh"
 
 # Help function
 show_help() {
-    echo "Usage: foli_02_cutadapt.sh <input_files> [output_dir] <i5_file> <i7_file> [threads] [skip] [delete]"
+    echo "Usage: foli_02_cutadapt.sh <input_files> [output_dir] <i5_file> <i7_file> [threads] [skip] [skip_seqkit] [delete]"
     echo "  input_files : Space-separated list of FASTQ file paths (.fq/.fastq/.fq.gz/.fastq.gz)"
     echo "  output_dir  : Output directory for UMI-tagged files (default: ./rest_all)"
     echo "  i5_file     : Path to I5 index file"
     echo "  i7_file     : Path to I7 index file"
     echo "  threads     : Number of threads to use (default: 16)"
     echo "  skip        : Skip certain steps (default: 0)"
+    echo "  skip_seqkit : Skip seqkit stats on output_dir (default: false)"
     echo "  delete      : Delete intermediate files (default: false)"
     echo "  -h, --help  : Show this help message"
     exit 0
@@ -31,7 +32,8 @@ I5_FILE="${3}"
 I7_FILE="${4}"
 THREADS="${5:-16}"
 SKIP="${6:-0}"
-DELETE="${7:-false}"
+SKIP_SEQKIT="${7:-False}"
+DELETE="${8:-false}"
 
 REST_DIR="$OUTPUT_DIR"
 
@@ -103,7 +105,9 @@ for fqR1 in "${fqr1s[@]}"; do
 
 done | tqdm --total ${#fqr1s[@]} > /dev/null
 
-run_seqkit_stats "$REST_DIR"
+if [[ "$SKIP_SEQKIT" != "True" ]]; then
+    run_seqkit_stats "$REST_DIR"
+fi
 # run_seqkit_stats "$REST_NONDIMER_DIR"
 
 echo "Pre-STAR pipeline completed successfully!"

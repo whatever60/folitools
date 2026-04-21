@@ -78,6 +78,9 @@ def assign_probes(
     i7: Annotated[Path, Parameter(help="Path to i7 adapter FASTA file")],
     cores: Annotated[int, Parameter(help="Number of cores to use")] = 8,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
+    skip_seqkit: Annotated[
+        bool, Parameter(help="Skip running seqkit stats on the output directory")
+    ] = False,
     delete: Annotated[
         bool, Parameter(help="Delete input files after processing")
     ] = False,
@@ -96,6 +99,7 @@ def assign_probes(
             str(i7),
             str(cores),
             str(skip),
+            str(skip_seqkit),
             str(delete),
         ),
     )

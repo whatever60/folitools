@@ -1,8 +1,8 @@
 import sys
-import gzip
 from typing import Generator, TextIO, Annotated
 
 from cyclopts import Parameter, run
+from xopen import xopen
 
 
 def read_interleaved_fastq(
@@ -26,13 +26,29 @@ def read_interleaved_fastq(
 
 def add_umi(
     fastq_stream: TextIO,
-    output_fastq_1: str,  # assumed to be gzipped
-    output_fastq_2: str,  # assumed to be gzipped
+    output_fastq_1: str,
+    output_fastq_2: str,
     sep: str = "_",
+    compression_threads: int = 2,
+    compression_level: int = 1,
 ):
+    # xopen with threads>0 pipes through pigz (or zstd) when the file name
+    # ends in a known compressed extension. For a .gz file this avoids the
+    # single-threaded gzip.open(..., "wt") that was previously the serial
+    # bottleneck of the cutadapt|add_umi pipeline.
     with (
-        gzip.open(output_fastq_1, "wt") as out_fastq_1,
-        gzip.open(output_fastq_2, "wt") as out_fastq_2,
+        xopen(
+            output_fastq_1,
+            "wt",
+            threads=compression_threads,
+            compresslevel=compression_level,
+        ) as out_fastq_1,
+        xopen(
+            output_fastq_2,
+            "wt",
+            threads=compression_threads,
+            compresslevel=compression_level,
+        ) as out_fastq_2,
     ):
         for (
             header_1,
@@ -63,8 +79,6 @@ def add_umi(
 
             new_id_1 = sep.join([read_id_1, umi_1, umi_2])
             new_id_2 = sep.join([read_id_2, umi_1, umi_2])
-            # new_comment_1 = adapter_1
-            # new_comment_2 = adapter_2
             new_comment = f"{adapter_1}+{adapter_2}"
 
             new_seq_1 = seq_1[len(umi_1) :]
@@ -99,6 +113,24 @@ def main(
         str,
         Parameter(help="Output FASTQ file for read 2 (gzipped)"),
     ],
+    compression_threads: Annotated[
+        int,
+        Parameter(
+            help=(
+                "External compression threads per output file (via pigz/zstd). "
+                "0 uses in-process compression."
+            )
+        ),
+    ] = 2,
+    compression_level: Annotated[
+        int,
+        Parameter(
+            help=(
+                "Compression level for the gzipped output. 1 (default) is "
+                "fast; raise for smaller files at the cost of speed."
+            )
+        ),
+    ] = 1,
 ):
     """
     Add UMI to FASTQ records from stdin and write to output files.
@@ -106,9 +138,16 @@ def main(
     Args:
         o1: Output FASTQ file for read 1 (gzipped).
         o2: Output FASTQ file for read 2 (gzipped).
-        sep: Separator between read ID and UMIs.
+        compression_threads: per-file external compression threads.
+        compression_level: gzip compression level.
     """
-    add_umi(fastq_stream=sys.stdin, output_fastq_1=o1, output_fastq_2=o2)
+    add_umi(
+        fastq_stream=sys.stdin,
+        output_fastq_1=o1,
+        output_fastq_2=o2,
+        compression_threads=compression_threads,
+        compression_level=compression_level,
+    )
 
 
 if __name__ == "__main__":

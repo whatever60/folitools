@@ -24,6 +24,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "umi-tools>=1.1.6",
     "wcmatch>=10.1",
+    "xopen>=2.0.2",
     "openpyxl",
     "primer3-py>=2.2.0",
     "pydeseq2>=0.5.3",

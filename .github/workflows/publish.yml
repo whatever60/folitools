@@ -44,6 +44,11 @@ jobs:
           command: build
           args: --release --out dist
           manylinux: "2_28"
+          # hts-sys uses bindgen (via clang) to parse htslib headers; the
+          # AlmaLinux 8-based manylinux_2_28 image doesn't ship clang/llvm
+          # by default.
+          before-script-linux: |
+            dnf install -y clang
 
       - uses: actions/upload-artifact@v4
         with:

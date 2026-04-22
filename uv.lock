@@ -277,13 +277,14 @@ wheels = [
 ]
 
 [[package]]
-name = "cutadapt"
-version = "5.3.dev18+gf8cb38d70"
-source = { git = "https://github.com/whatever60/cutadapt.git?rev=folitools-perf#f8cb38d70e223229146c5b4b6fdcad4c79a14712" }
+name = "cutadapt-folitools"
+version = "5.3.1.post0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dnaio" },
     { name = "xopen" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/0d/42/e6a4f92fdd1b3407f12d7e251e513b6e72d008088e07f3eaf766ad5df71f/cutadapt_folitools-5.3.1.post0.tar.gz", hash = "sha256:387e14c9271526285bf7e06ad2c17828fdff6b2f3332b037261a8a5ed875f84b", size = 258928, upload-time = "2026-04-22T05:15:17.753Z" }
 
 [[package]]
 name = "cycler"
@@ -412,7 +413,7 @@ version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },
-    { name = "cutadapt" },
+    { name = "cutadapt-folitools" },
     { name = "cyclopts" },
     { name = "joblib" },
     { name = "matplotlib" },
@@ -462,7 +463,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "biopython", specifier = ">=1.85" },
-    { name = "cutadapt", git = "https://github.com/whatever60/cutadapt.git?rev=folitools-perf" },
+    { name = "cutadapt-folitools", specifier = "==5.3.1.post0" },
     { name = "cyclopts", specifier = "==3.22.5" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=6.29.5" },
     { name = "ipython", marker = "extra == 'notebook'", specifier = ">=9.3.0" },

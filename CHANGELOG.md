@@ -10,16 +10,19 @@ Starting with version 0.3.2, releases are tracked here.
 
 ### Changed
 
-- `cutadapt` is now installed from our pinned fork
-  [whatever60/cutadapt@folitools-perf](https://github.com/whatever60/cutadapt/tree/folitools-perf)
-  instead of the bioconda/PyPI package. The fork adds performance
-  improvements that matter for `foli assign-probes` with large primer
-  panels; `Match` objects are bit-identical to upstream cutadapt (verified
-  50,000/50,000 on real foli-seq reads and via the cutadapt test suite).
-- `environment.yaml` no longer lists `cutadapt`; pip installs it from the
-  fork via the `pyproject.toml` dependency. A C compiler (`gcc`, already
-  in `environment.yaml`) is required because the fork builds Cython
-  extensions from source.
+- `cutadapt` is now installed from our fork, published on PyPI as
+  [`cutadapt-folitools`](https://pypi.org/project/cutadapt-folitools/)
+  (source: [whatever60/cutadapt@folitools-perf](https://github.com/whatever60/cutadapt/tree/folitools-perf)),
+  instead of the bioconda/PyPI `cutadapt` package. The fork installs the
+  same `cutadapt` Python module and console script as upstream, and adds
+  performance improvements that matter for `foli assign-probes` with
+  large primer panels; `Match` objects are bit-identical to upstream
+  cutadapt (verified 50,000/50,000 on real foli-seq reads and via the
+  cutadapt test suite).
+- `environment.yaml` no longer lists `cutadapt`; pip installs it from
+  the fork via the `pyproject.toml` dependency. A C compiler (`gcc`,
+  already in `environment.yaml`) is required because `cutadapt-folitools`
+  is published as an sdist and builds Cython extensions from source.
 
 ### Performance
 

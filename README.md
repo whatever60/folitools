@@ -24,11 +24,13 @@ conda install -c bioconda -c conda-forge \
 
 ### Cutadapt fork
 
-Starting with folitools 0.4.0, `cutadapt` is installed as a pinned git
-dependency from our fork [whatever60/cutadapt@folitools-perf][fork]. The
-fork adds several performance improvements that matter for the
-`foli assign-probes` workload (hundreds of i5/i7 primers, paired-end
-gzipped FASTQ inputs):
+Starting with folitools 0.4.0, `cutadapt` is installed from our fork,
+published on PyPI as [`cutadapt-folitools`][pypi] (source:
+[whatever60/cutadapt@folitools-perf][fork]). The fork installs the same
+`cutadapt` Python module and `cutadapt` console script as upstream, so
+nothing in your own tooling needs to change. It adds performance
+improvements that matter for the `foli assign-probes` workload (hundreds
+of i5/i7 primers, paired-end gzipped FASTQ inputs):
 
 - `SeedMultiAdapterFilter` — a seed-and-extend pre-filter for large
   non-anchored multi-adapter groups. Match objects are **bit-identical**
@@ -45,13 +47,18 @@ End-to-end on a representative 3.1 M read-pair sample with 542×2 primers
 writer in `add_umi` cuts one sample from ~7:30 wall time to ~2:45
 (~2.7× faster).
 
-Because the fork contains Cython extensions, `pip install folitools` will
-compile `cutadapt` from source. A C compiler is required — the `gcc`
-entry in the conda command above covers it on Linux. On macOS the Xcode
-command-line tools suffice.
+`cutadapt-folitools` is published as an sdist, so `pip install folitools`
+will compile `cutadapt` from source. A C compiler is required — the
+`gcc` entry in the conda command above covers it on Linux. On macOS the
+Xcode command-line tools suffice.
 
-If you would prefer the upstream cutadapt wheel on PyPI, you can override
-the pin with:
+If you already have the upstream `cutadapt` wheel installed from PyPI
+it will be replaced by `cutadapt-folitools` when you install folitools,
+because the two distributions install the same `cutadapt` module and
+console script. Don't install both side-by-side.
+
+If you would prefer the upstream cutadapt wheel on PyPI, you can skip
+the fork with:
 
 ```bash
 pip install --no-deps folitools
@@ -60,6 +67,7 @@ pip install "cutadapt>=5.1" <other-deps>
 
 but the `foli assign-probes` stage will be slower.
 
+[pypi]: https://pypi.org/project/cutadapt-folitools/
 [fork]: https://github.com/whatever60/cutadapt/tree/folitools-perf
 
 ## Usage

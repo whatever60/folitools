@@ -6,13 +6,16 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
-    # cutadapt is pulled from our fork (whatever60/cutadapt@folitools-perf).
-    # The fork contains a SeedMultiAdapterFilter that speeds up matching of
-    # non-anchored multi-adapter groups (e.g. foli assign-probes with
-    # hundreds of i5/i7 primers) while returning bit-identical Match
-    # objects. Building the fork requires a C compiler (gcc, already
-    # listed in environment.yaml).
-    "cutadapt @ git+https://github.com/whatever60/cutadapt.git@folitools-perf",
+    # cutadapt is pulled from our fork published on PyPI as
+    # `cutadapt-folitools`. The fork installs the same `cutadapt` Python
+    # module and `cutadapt` console script as upstream, but adds a
+    # SeedMultiAdapterFilter that speeds up matching of non-anchored
+    # multi-adapter groups (e.g. foli assign-probes with hundreds of
+    # i5/i7 primers) while returning bit-identical Match objects. The
+    # distinct distribution name is required because PyPI rejects direct
+    # git+https URLs in Requires-Dist. Building the sdist requires a C
+    # compiler (gcc, already listed in environment.yaml).
+    "cutadapt-folitools==5.3.1.post0",
     "cyclopts==3.22.5",
     "joblib>=1.5.1",
     "matplotlib>=3.10.3",

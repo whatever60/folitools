@@ -6,6 +6,21 @@ Starting with version 0.3.2, releases are tracked here.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-04-22
+
+### Changed
+
+- Bumped the `cutadapt-folitools` pin from `==5.3.1.post0` to
+  `>=5.3.1.post1`. The new upstream release includes a q-gram lemma
+  tightening of `SeedMultiAdapterFilter.is_acceptable` so that adapters
+  whose pigeonhole-safe seed size would fall below `MIN_SEED_SIZE` are
+  correctly routed to the non-indexed `MultipleAdapters` path instead
+  of being wrapped with a too-large seed. This makes the "bit-identical
+  to upstream cutadapt" guarantee hold for all accepted adapter groups,
+  not just ones we had measured. No observable change for the
+  `foli assign-probes` workload — the 542×2 primer set already resolves
+  to seed=6, safely above the floor.
+
 ## [0.4.0] - 2026-04-22
 
 ### Changed

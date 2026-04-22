@@ -1,6 +1,6 @@
 [project]
 name = "folitools"
-version = "0.4.0"
+version = "0.4.1"
 description = "Foli-seq data processing and analysis tools"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,7 +15,7 @@ dependencies = [
     # distinct distribution name is required because PyPI rejects direct
     # git+https URLs in Requires-Dist. Building the sdist requires a C
     # compiler (gcc, already listed in environment.yaml).
-    "cutadapt-folitools==5.3.1.post0",
+    "cutadapt-folitools>=5.3.1.post1",
     "cyclopts==3.22.5",
     "joblib>=1.5.1",
     "matplotlib>=3.10.3",

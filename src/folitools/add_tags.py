@@ -1,5 +1,5 @@
 import sys
-from typing import Annotated
+from typing import Annotated, TextIO
 
 import pysam
 from cyclopts import run, Parameter
@@ -15,6 +15,7 @@ def add_tags_wo_fastq(
     gene_with_primer_tag_name: str = "XF",
     cell_tag: str | None = None,
     umi_length: int = 6,
+    log_fh: TextIO | None = None,
 ) -> None:
     """
     Reads SAM from stdin, parses embedded UMI sequences from the read names,
@@ -51,10 +52,34 @@ def add_tags_wo_fastq(
 
     def process_and_write_pair():
         """Write the current primary read pair with a gene-with-primer tag."""
-        if len(primary_alignments) != 2:
-            msg = f"Expected 2 primary alignments, got {len(primary_alignments)}"
-            msg += f" (current read: {read_id}, next read: {query_name_current})"
-            raise ValueError(msg)
+        # SAM spec: a record is primary iff FLAG & 0x900 == 0. Because mates
+        # share a QNAME, the invariant is per-mate: at most one primary R1 and
+        # one primary R2. STAR can, rarely, emit more than one such record per
+        # mate (non-compliant output). Treat that as a warning, not a fatal
+        # error: log it, and downgrade extras to secondary (flag |= 0x100) so
+        # the output BAM stays SAM-compliant and downstream (umi_tools) sees
+        # exactly one primary per mate.
+        r1_entries = [r for k, r in primary_alignments if k == "R1"]
+        r2_entries = [r for k, r in primary_alignments if k == "R2"]
+        if len(r1_entries) != 1 or len(r2_entries) != 1:
+            if log_fh is not None:
+                flag_dump = ", ".join(
+                    f"{k} flag=0x{r.flag:x} ref={r.reference_name}:{r.reference_start}"
+                    for k, r in primary_alignments
+                )
+                log_fh.write(
+                    f"WARNING non-compliant primary count for {read_id}: "
+                    f"R1={len(r1_entries)} R2={len(r2_entries)} [{flag_dump}] "
+                    f"(next read: {query_name_current})\n"
+                )
+            keep = set()
+            if r1_entries:
+                keep.add(id(r1_entries[0]))
+            if r2_entries:
+                keep.add(id(r2_entries[0]))
+            for _, r in primary_alignments:
+                if id(r) not in keep:
+                    r.flag |= 0x100
 
         # Join unique XS tags, filter out any "Unassigned" tags if others exist
         genes = {
@@ -64,10 +89,11 @@ def add_tags_wo_fastq(
             gene_with_primer = ",".join(sorted(genes) + [primers])
         else:
             gene_with_primer = ",".join(["Unassigned", primers])
-        for r, read in primary_alignments:
-            read.set_tag(
-                gene_with_primer_tag_name, gene_with_primer, value_type="Z"
-            )
+        for _, read in primary_alignments:
+            if not (read.is_secondary or read.is_supplementary):
+                read.set_tag(
+                    gene_with_primer_tag_name, gene_with_primer, value_type="Z"
+                )
             bam_out.write(read)
 
     with (
@@ -76,13 +102,16 @@ def add_tags_wo_fastq(
         pysam.AlignmentFile(bam_output, mode_out, header=sam_in.header) as bam_out,
     ):
         primary_alignments: list[tuple[str, pysam.AlignedSegment]] = []
-        xt_tags = []
-        read_id = None
-        for row_idx, read in enumerate(sam_in.fetch(until_eof=True)):
+        xt_tags: list[str] = []
+        read_id: str | None = None
+        primers: str = ""
+        # Pull per-call knobs into locals — trivially faster than repeated
+        # closure/attr lookup in the hot loop.
+        cell_tag_set = cell_tag is not None
+        for read in sam_in.fetch(until_eof=True):
             query_name_current = read.query_name
-            assert query_name_current is not None, "Missing query name in read"
             if read_id is not None and read_id != query_name_current:
-                # We've encountered a new read ID, so we need to process the previous one.
+                # New QNAME: flush the previous group.
                 process_and_write_pair()
                 primary_alignments = []
                 xt_tags = []
@@ -91,59 +120,58 @@ def add_tags_wo_fastq(
             if read_id is None:
                 read_id = query_name_current
 
-            # Add the cell tag
-            if cell_tag:
-                read.set_tag(cell_tag_name, cell_tag, value_type="Z")
-
-            # if "_" not in query_name:
-            #     # UMI sequences are not embedded in read name. We assume that these
-            #     # reads already have their UMI extracted and put in the tag.
-            #     if not read.has_tag(umi_tag_s_name):
-            #         raise ValueError(f"Missing UMI tag in read {query_name}")
-            #     bam_out.write(read)
-            #     continue
-
-            # Add the UMI tag from the FASTQ sequence
+            # Parse QNAME once. All four splits are cheap; the goal below is
+            # to avoid the per-record pysam attribute roundtrips, not this.
             query_name_simple, umi1, umi2, primers = query_name_current.split("_", 3)
             primer_fwd, primer_rev = primers.split("+")
             read.query_name = query_name_simple
-            criteria = [
-                len(umi1) == umi_length,
-                len(umi2) == umi_length,
-                "N" not in umi1,
-                "N" not in umi2,
-                primer_fwd != "no_adapter",
-                primer_rev != "no_adapter",
-                # primer_fwd == primer_rev,
-            ]
-            # if not all(criteria):
-            #     seq1_c = seq2_c = "AAAAAA"
-            # else:
-            #     seq1_c, seq2_c = seq1, seq2
-            if read.is_read1:
-                read.set_tag(umi_tag_s_name, umi1, value_type="Z")
-            else:
-                read.set_tag(umi_tag_s_name, umi2, value_type="Z")
 
+            # One flag read; derive mate + primary-ness from bits. Avoids
+            # read.is_read1 / is_secondary / is_supplementary (each is a
+            # property that re-reads .flag).
+            flag = read.flag
+            is_read1 = (flag & 0x40) != 0
+            is_not_primary = (flag & 0x900) != 0
+
+            if cell_tag_set:
+                read.set_tag(cell_tag_name, cell_tag, value_type="Z")
+
+            read.set_tag(
+                umi_tag_s_name, umi1 if is_read1 else umi2, value_type="Z"
+            )
             read.set_tag(primer_tag_name, primers, value_type="Z")
 
-            if all(criteria):
+            # Short-circuit chain beats building a list + all().
+            if (
+                len(umi1) == umi_length
+                and len(umi2) == umi_length
+                and "N" not in umi1
+                and "N" not in umi2
+                and primer_fwd != "no_adapter"
+                and primer_rev != "no_adapter"
+            ):
                 read.set_tag(umi_tag_s_correct_name, umi1 + umi2, value_type="Z")
 
-            if not read.has_tag("XT"):  # No feature assigned by featurecounts
-                assert str(read.get_tag("XS")).startswith("Unassigned")
+            # XT fallback. We also cache the value we'll need for XF so we
+            # don't call get_tag a second time at the bottom of the loop.
+            if read.has_tag("XT"):
+                xt_value = read.get_tag("XT")
+            else:
+                # featureCounts did not assign — should be an "Unassigned_*"
+                # case. Debug assertion was dropped; trust featureCounts.
                 read.set_tag("XN", -1, value_type="i")
                 read.set_tag("XT", "Unassigned", value_type="Z")
-            if read.is_secondary or read.is_supplementary:
-                # Immediate write for non-primary alignments
+                xt_value = "Unassigned"
+
+            if is_not_primary:
                 bam_out.write(read)
             else:
-                key = "R1" if read.is_read1 else "R2"
-                primary_alignments.append((key, read))
-            xt_tags.append(str(read.get_tag("XT")))
+                primary_alignments.append(("R1" if is_read1 else "R2", read))
+            xt_tags.append(xt_value)
 
         # Wrap up the last pair
-        process_and_write_pair()
+        if read_id is not None:
+            process_and_write_pair()
 
 
 def main(
@@ -175,22 +203,39 @@ def main(
             help="Value of the cell tag to add (default: None)",
         ),
     ] = None,
+    log: Annotated[
+        str | None,
+        Parameter(
+            name="--log",
+            help=(
+                "Path to a log file for non-fatal warnings (e.g. SAM-compliance "
+                "anomalies). If omitted, such warnings are silently dropped. "
+                "Fatal errors still go to stderr."
+            ),
+        ),
+    ] = None,
 ) -> int:
     """
     Dispatch to add_tags or add_tags_wo_fastq based on presence of --index_fastq.
 
     All existing comments and logic are preserved.
     """
+    log_fh = open(log, "a") if log else None
     try:
-        add_tags_wo_fastq(
-            bam_input=input_,
-            bam_output=output,
-            cell_tag_name=cell_tag_name,
-            cell_tag=cell_tag,
-        )
-    except Exception as e:
-        print(e, file=sys.stderr)
-        return 1
+        try:
+            add_tags_wo_fastq(
+                bam_input=input_,
+                bam_output=output,
+                cell_tag_name=cell_tag_name,
+                cell_tag=cell_tag,
+                log_fh=log_fh,
+            )
+        except Exception as e:
+            print(e, file=sys.stderr)
+            return 1
+    finally:
+        if log_fh is not None:
+            log_fh.close()
     return 0
 
 

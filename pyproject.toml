@@ -1,6 +1,6 @@
 [project]
 name = "folitools"
-version = "0.4.1"
+version = "0.5.0"
 description = "Foli-seq data processing and analysis tools"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -72,22 +72,30 @@ notebook = [
 [project.scripts]
 foli = "folitools.cli:app"
 foli-primer = "folitools.primer_selection.cli:app"
+# Rust-backed hot-path invoked by foli_03_map.sh. Implemented as a Python
+# entry point that forwards argv into the compiled `folitools._rust_native`
+# extension (source under rust/).
+foli_add_tags = "folitools._add_tags_entry:cli"
 
 [build-system]
-requires = ["uv_build>=0.8.11,<0.9.0"]
-build-backend = "uv_build"
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
 
-[tool.uv.build-backend]
-# keep local data out of built dists
-wheel-exclude  = [
-    "src/folitools/primer_selection/data/**",
-    "c/**",
-    "rust/**",
-]
-source-exclude = [
-    "src/folitools/primer_selection/data/**",
-    "c/**",
-    "rust/**",
+# maturin ships the Python package + a compiled Rust extension
+# (folitools._rust_native) as one wheel. The Rust source is under rust/;
+# the extension is imported by src/folitools/_add_tags_entry.py to back
+# the `foli_add_tags` console script.
+[tool.maturin]
+bindings = "pyo3"
+manifest-path = "rust/Cargo.toml"
+python-source = "src"
+module-name = "folitools._rust_native"
+features = ["python-extension"]
+# primer_selection/data/** is large reference data; users fetch it on demand
+# rather than bundling it into every wheel. c/** is legacy scratch.
+exclude = [
+    { path = "src/folitools/primer_selection/data/**", format = ["sdist", "wheel"] },
+    { path = "c/**", format = ["sdist", "wheel"] },
 ]
 
 [tool.pytest.ini_options]

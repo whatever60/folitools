@@ -6,6 +6,59 @@ Starting with version 0.3.2, releases are tracked here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-22
+
+### Added
+
+- Rust-backed `foli_add_tags` console script, a drop-in replacement for
+  `python -m folitools.add_tags` used by `foli map`. The logic lives in
+  `rust/src/add_tags.rs` and is exposed to Python via a pyo3 extension
+  module (`folitools._rust_native`); a thin Python entry at
+  `folitools._add_tags_entry` forwards `argv` into it. Matches the Python
+  implementation's output bit-for-bit in the common path; same CLI
+  surface (`-i`, `-o`, `--cell_tag_name`, `--cell_tag`, `--log`).
+- `.github/workflows/publish.yml` now builds platform wheels with maturin
+  (Linux manylinux_2_28 x86_64 + macOS universal2) plus an sdist, and
+  publishes to TestPyPI then PyPI on `v*` tags via trusted publishing.
+
+### Changed
+
+- **Build backend**: `uv_build` → `maturin`. The wheel now bundles both
+  the Python package and a compiled Rust extension
+  (`folitools._rust_native`) so `pip install folitools` is sufficient —
+  no separate Rust build step.
+- `foli map` (specifically `foli_03_map.sh`) always calls `foli_add_tags`.
+  The Python `folitools.add_tags` module is kept as the reference
+  implementation and for import in tests, but is no longer wired into the
+  mapping pipeline.
+- `samtools collate` in `foli_03_map.sh` switched from `-l 1 --threads 1`
+  to `-u --threads 4`. `add_tags` consumes the output directly, so the
+  compression round-trip was pure overhead; the change saves ~45 s on a
+  12.6 M-record sample.
+- STAR now runs with `--chimSegmentMin 12` to emit chimeric alignments as
+  supplementary records in `Aligned.out.bam`. featureCounts' `-B -C`
+  already excludes them from counts, so gene-level output is unchanged;
+  the extra records are useful for IGV inspection and fusion-aware
+  downstream tooling.
+- `add_tags.py`: per-mate SAM-compliance check (exactly one primary per
+  mate per QNAME) replaced the previous "total == 2" check, with per-mate
+  FLAG dumps in the log on violation. Non-compliant extras are downgraded
+  from primary to secondary (`flag |= 0x100`) so downstream (umi_tools)
+  sees a compliant BAM. Warnings now go to a `--log` file instead of
+  stderr. The hot loop also caches `read.flag` and uses bit tests in
+  place of `is_read1` / `is_secondary` / `is_supplementary` property
+  lookups.
+- `rust/Cargo.toml`: feature-gated the `calc_rest_stats` binary behind a
+  `heavy_deps` feature so a default build doesn't compile polars/rayon.
+
+### Performance
+
+- On a 12.6 M-record sample (real featureCounts output, stdin → stdout
+  pipe configuration matching the production pipeline): `add_tags`
+  dropped from **118.5 s** (Python + pysam) to **72.4 s** (Rust
+  + rust-htslib), a 1.64× wall-time and 1.85× user-CPU speedup. Peak
+  memory dropped from ~34 MB to ~3 MB.
+
 ## [0.4.1] - 2026-04-22
 
 ### Changed

@@ -1,0 +1,353 @@
+//! Core implementation of `foli_add_tags` — shared by both the standalone
+//! binary (`rust/src/bin/foli_add_tags.rs`) and the Python extension module
+//! (`rust/src/lib.rs`). See the module docs there for context.
+
+use std::collections::{BTreeSet, HashSet};
+use std::fs::OpenOptions;
+use std::io::Write;
+
+use anyhow::{anyhow, Context, Result};
+use clap::Parser;
+use rust_htslib::bam::{
+    self,
+    record::{Aux, Record},
+    Format, Header, Read, Reader, Writer,
+};
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "foli_add_tags",
+    about = "Add primer/UMI/gene-with-primer tags to a collated BAM from foli map.",
+    long_about = None,
+)]
+pub struct Args {
+    /// Input BAM path, or '-' for stdin.
+    #[arg(short = 'i', long = "input", default_value = "-")]
+    pub input: String,
+
+    /// Output BAM path, or '-' for uncompressed BAM to stdout.
+    #[arg(short = 'o', long = "output", default_value = "-")]
+    pub output: String,
+
+    /// Name of the cell barcode tag.
+    #[arg(long = "cell_tag_name", default_value = "CB")]
+    pub cell_tag_name: String,
+
+    /// Value for the cell barcode tag. If absent, no CB tag is written.
+    #[arg(long = "cell_tag")]
+    pub cell_tag: Option<String>,
+
+    /// Append-mode log file for non-fatal SAM-compliance warnings.
+    /// If omitted, warnings are silently dropped.
+    #[arg(long = "log")]
+    pub log: Option<String>,
+}
+
+const UMI_LEN: usize = 6;
+
+// 2-byte SAM aux tag constants.
+const TAG_US: &[u8; 2] = b"US";
+const TAG_UC: &[u8; 2] = b"UC";
+const TAG_PR: &[u8; 2] = b"PR";
+const TAG_XF: &[u8; 2] = b"XF";
+const TAG_XT: &[u8; 2] = b"XT";
+const TAG_XN: &[u8; 2] = b"XN";
+
+/// Parse `argv` (argv[0] is the program name) and run the tag-adding pipeline.
+/// Returns 0 on success, non-zero on usage or runtime failure.
+pub fn run_cli(argv: Vec<String>) -> i32 {
+    let args = match Args::try_parse_from(argv) {
+        Ok(a) => a,
+        Err(e) => {
+            // clap already formats help/version output nicely; let it do its thing.
+            e.print().ok();
+            return match e.kind() {
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
+                _ => 2,
+            };
+        }
+    };
+    match run(args) {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("{:#}", e);
+            1
+        }
+    }
+}
+
+/// Programmatic entry point; prefer this from other Rust code.
+pub fn run(args: Args) -> Result<()> {
+    let cell_tag_name_bytes = args.cell_tag_name.as_bytes();
+    if cell_tag_name_bytes.len() != 2 {
+        return Err(anyhow!(
+            "cell_tag_name must be exactly 2 bytes, got {:?}",
+            args.cell_tag_name
+        ));
+    }
+
+    let mut reader = if args.input == "-" {
+        Reader::from_stdin().context("open stdin for BAM read")?
+    } else {
+        Reader::from_path(&args.input).with_context(|| format!("open {}", args.input))?
+    };
+
+    let header = Header::from_template(reader.header());
+
+    let (fmt, uncompressed) = if args.output == "-" {
+        (Format::Bam, true) // match Python's "wb0" (stdout = uncompressed BAM)
+    } else if args.output.ends_with(".bam") {
+        (Format::Bam, false)
+    } else if args.output.ends_with(".sam") {
+        (Format::Sam, false)
+    } else {
+        return Err(anyhow!(
+            "Output file must end with .bam or .sam (got {})",
+            args.output
+        ));
+    };
+
+    let mut writer = if args.output == "-" {
+        Writer::from_stdout(&header, fmt).context("open stdout BAM writer")?
+    } else {
+        Writer::from_path(&args.output, &header, fmt)
+            .with_context(|| format!("open writer for {}", args.output))?
+    };
+    if uncompressed {
+        writer
+            .set_compression_level(bam::CompressionLevel::Uncompressed)
+            .context("set stdout compression to uncompressed")?;
+    }
+
+    let mut log_fh = match args.log.as_deref() {
+        Some(path) => Some(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .with_context(|| format!("open log file {}", path))?,
+        ),
+        None => None,
+    };
+
+    let mut current_qname: Vec<u8> = Vec::new();
+    let mut current_primers: Vec<u8> = Vec::new();
+    let mut primary_batch: Vec<Record> = Vec::new();
+    let mut xt_values: Vec<Vec<u8>> = Vec::new();
+
+    let mut record = Record::new();
+
+    loop {
+        match reader.read(&mut record) {
+            None => break,
+            Some(Ok(())) => {}
+            Some(Err(e)) => return Err(anyhow::Error::from(e).context("reading input BAM")),
+        }
+
+        let qname = record.qname().to_vec();
+
+        if !current_qname.is_empty() && current_qname.as_slice() != qname.as_slice() {
+            finalize_group(
+                &mut primary_batch,
+                &xt_values,
+                &current_primers,
+                &current_qname,
+                &mut writer,
+                log_fh.as_mut(),
+            )?;
+            xt_values.clear();
+            current_qname.clear();
+            current_primers.clear();
+        }
+
+        let mut parts = qname.splitn(4, |&b| b == b'_');
+        let id = parts
+            .next()
+            .ok_or_else(|| anyhow!("empty qname"))?
+            .to_vec();
+        let umi1 = parts
+            .next()
+            .ok_or_else(|| bad_qname(&qname, "missing UMI1"))?
+            .to_vec();
+        let umi2 = parts
+            .next()
+            .ok_or_else(|| bad_qname(&qname, "missing UMI2"))?
+            .to_vec();
+        let primers = parts
+            .next()
+            .ok_or_else(|| bad_qname(&qname, "missing primers"))?
+            .to_vec();
+
+        let mut primer_split = primers.splitn(2, |&b| b == b'+');
+        let primer_fwd = primer_split.next().unwrap().to_vec();
+        let primer_rev = primer_split
+            .next()
+            .ok_or_else(|| bad_qname(&qname, "primers missing '+'"))?
+            .to_vec();
+
+        if current_qname.is_empty() {
+            current_qname.extend_from_slice(&qname);
+            current_primers.clone_from(&primers);
+        }
+
+        record.set_qname(&id);
+
+        if let Some(cv) = args.cell_tag.as_deref() {
+            let _ = record.remove_aux(cell_tag_name_bytes);
+            record.push_aux(cell_tag_name_bytes, Aux::String(cv))?;
+        }
+
+        let criteria_ok = umi1.len() == UMI_LEN
+            && umi2.len() == UMI_LEN
+            && !umi1.contains(&b'N')
+            && !umi2.contains(&b'N')
+            && primer_fwd.as_slice() != b"no_adapter"
+            && primer_rev.as_slice() != b"no_adapter";
+
+        let flag = record.flags();
+        let is_read1 = (flag & 0x40) != 0;
+        let us_value = if is_read1 { &umi1 } else { &umi2 };
+        let us_str = std::str::from_utf8(us_value).context("UMI not UTF-8")?;
+        let _ = record.remove_aux(TAG_US);
+        record.push_aux(TAG_US, Aux::String(us_str))?;
+
+        let pr_str = std::str::from_utf8(&primers).context("primers not UTF-8")?;
+        let _ = record.remove_aux(TAG_PR);
+        record.push_aux(TAG_PR, Aux::String(pr_str))?;
+
+        if criteria_ok {
+            let mut uc = Vec::with_capacity(umi1.len() + umi2.len());
+            uc.extend_from_slice(&umi1);
+            uc.extend_from_slice(&umi2);
+            let uc_str = std::str::from_utf8(&uc).context("UC not UTF-8")?;
+            let _ = record.remove_aux(TAG_UC);
+            record.push_aux(TAG_UC, Aux::String(uc_str))?;
+        }
+
+        if record.aux(TAG_XT).is_err() {
+            record.push_aux(TAG_XN, Aux::I32(-1))?;
+            record.push_aux(TAG_XT, Aux::String("Unassigned"))?;
+        }
+
+        let xt_val: Vec<u8> = match record.aux(TAG_XT) {
+            Ok(Aux::String(s)) => s.as_bytes().to_vec(),
+            _ => b"Unassigned".to_vec(),
+        };
+        xt_values.push(xt_val);
+
+        if (flag & 0x900) != 0 {
+            writer.write(&record).context("write non-primary record")?;
+        } else {
+            primary_batch.push(record.clone());
+        }
+    }
+
+    if !current_qname.is_empty() {
+        finalize_group(
+            &mut primary_batch,
+            &xt_values,
+            &current_primers,
+            &current_qname,
+            &mut writer,
+            log_fh.as_mut(),
+        )?;
+    }
+
+    Ok(())
+}
+
+fn bad_qname(qname: &[u8], what: &str) -> anyhow::Error {
+    anyhow!(
+        "qname {} ({})",
+        what,
+        String::from_utf8_lossy(qname).into_owned()
+    )
+}
+
+fn finalize_group(
+    primaries: &mut Vec<Record>,
+    xt_values: &[Vec<u8>],
+    primers: &[u8],
+    qname: &[u8],
+    writer: &mut Writer,
+    log_fh: Option<&mut std::fs::File>,
+) -> Result<()> {
+    let mut r1_idxs: Vec<usize> = Vec::new();
+    let mut r2_idxs: Vec<usize> = Vec::new();
+    for (i, r) in primaries.iter().enumerate() {
+        if (r.flags() & 0x40) != 0 {
+            r1_idxs.push(i);
+        } else {
+            r2_idxs.push(i);
+        }
+    }
+
+    if r1_idxs.len() != 1 || r2_idxs.len() != 1 {
+        if let Some(fh) = log_fh {
+            let dump: Vec<String> = primaries
+                .iter()
+                .map(|r| format!("flag=0x{:x} tid={} pos={}", r.flags(), r.tid(), r.pos()))
+                .collect();
+            let _ = writeln!(
+                fh,
+                "WARNING non-compliant primary count for {}: R1={} R2={} [{}]",
+                String::from_utf8_lossy(qname),
+                r1_idxs.len(),
+                r2_idxs.len(),
+                dump.join(", "),
+            );
+        }
+        let mut keep: HashSet<usize> = HashSet::new();
+        if let Some(&i) = r1_idxs.first() {
+            keep.insert(i);
+        }
+        if let Some(&i) = r2_idxs.first() {
+            keep.insert(i);
+        }
+        for (i, r) in primaries.iter_mut().enumerate() {
+            if !keep.contains(&i) {
+                let f = r.flags();
+                r.set_flags(f | 0x100);
+            }
+        }
+    }
+
+    let mut gene_set: BTreeSet<&[u8]> = BTreeSet::new();
+    for tag in xt_values {
+        if tag.as_slice() != b"Unassigned" {
+            for part in tag.split(|&b| b == b',') {
+                if !part.is_empty() {
+                    gene_set.insert(part);
+                }
+            }
+        }
+    }
+    let mut xf_value: Vec<u8> = Vec::new();
+    if gene_set.is_empty() {
+        xf_value.extend_from_slice(b"Unassigned,");
+        xf_value.extend_from_slice(primers);
+    } else {
+        let mut first = true;
+        for g in &gene_set {
+            if !first {
+                xf_value.push(b',');
+            }
+            xf_value.extend_from_slice(g);
+            first = false;
+        }
+        xf_value.push(b',');
+        xf_value.extend_from_slice(primers);
+    }
+    let xf_str = std::str::from_utf8(&xf_value).context("XF contains non-UTF-8 bytes")?;
+
+    for r in primaries.iter_mut() {
+        if (r.flags() & 0x900) == 0 {
+            let _ = r.remove_aux(TAG_XF);
+            r.push_aux(TAG_XF, Aux::String(xf_str))?;
+        }
+        writer.write(r).context("write primary record")?;
+    }
+
+    primaries.clear();
+    Ok(())
+}

@@ -218,6 +218,7 @@ for input_file in "${input_files[@]}"; do
             --outFilterMultimapNmax 1000 \
             --outSAMmultNmax 1000 \
             --outSAMunmapped Within \
+            --chimSegmentMin 12 \
             --chimOutType WithinBAM \
             --outSAMmode Full \
             --outSAMtype BAM Unsorted \
@@ -354,11 +355,11 @@ for input_file in "${input_files[@]}"; do
         & \
         samtools collate \
             -O \
-            -l 1 \
-            --threads 1 \
+            -u \
+            --threads 4 \
             "$FIFO" \
         | \
-        python -m folitools.add_tags --cell_tag ${sample_name} \
+        foli_add_tags --cell_tag ${sample_name} --log "$FEATURECOUNTS_DIR/${sample_name}.add_tags.log" \
         | \
         sambamba sort \
             --nthreads "$SORT_THREADS" \

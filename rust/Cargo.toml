@@ -1,12 +1,48 @@
 [package]
-name = "calc_rest_stats"
-version = "0.1.0"
+name = "folitools_rust"
+version = "0.5.0"
 edition = "2021"
 
+[lib]
+name = "folitools_rust"
+# `cdylib` is required for the Python extension module; `rlib` lets the
+# standalone binary (bin/add_tags.rs) reuse the same code.
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python-extension"]
+# Enable the pyo3-based Python extension module (folitools._rust_native).
+# Disable (via --no-default-features) to build only the standalone binary.
+python-extension = ["dep:pyo3"]
+# Heavy deps used only by the (unmaintained) `calc_rest_stats` binary.
+heavy_deps = ["dep:fastq", "dep:flate2", "dep:indicatif", "dep:polars", "dep:rayon"]
+
 [dependencies]
+anyhow = "1.0"
 clap = { version = "4.0", features = ["derive"] }
-fastq = "0.6"
-flate2 = "1.0"
-indicatif = "0.17"
-polars = { version = "0.40", features = ["parquet"] }
-rayon = "1.8"
+rust-htslib = { version = "0.49", default-features = false, features = ["bzip2", "lzma"] }
+
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"], optional = true }
+
+# Optional, only pulled in by `heavy_deps`.
+fastq = { version = "0.6", optional = true }
+flate2 = { version = "1.0", optional = true }
+indicatif = { version = "0.17", optional = true }
+polars = { version = "0.40", features = ["parquet"], optional = true }
+rayon = { version = "1.8", optional = true }
+
+[[bin]]
+name = "foli_add_tags"
+path = "src/bin/add_tags.rs"
+# The binary doesn't need pyo3; keep it out of the default build so a plain
+# `cargo build --bin foli_add_tags` produces a CLI without pulling pyo3.
+required-features = []
+
+[[bin]]
+name = "calc_rest_stats"
+path = "src/bin/calc_rest_stats.rs"
+required-features = ["heavy_deps"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

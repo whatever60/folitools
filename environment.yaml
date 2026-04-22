@@ -9,7 +9,8 @@ dependencies:
   - rust
   - gcc
   - fastp
-  - cutadapt
+  # cutadapt is installed from our fork via pip (see pyproject.toml); do not
+  # bring in the PyPI/bioconda package here as it would shadow the fork.
   - samtools
   - bwa-mem2
   - star

@@ -277,6 +277,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cutadapt"
+version = "5.3.dev18+gf8cb38d70"
+source = { git = "https://github.com/whatever60/cutadapt.git?rev=folitools-perf#f8cb38d70e223229146c5b4b6fdcad4c79a14712" }
+dependencies = [
+    { name = "dnaio" },
+    { name = "xopen" },
+]
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -324,6 +333,29 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/43/fa/6d96a0978d19e17b68d634497769987b16c8f4cd0a7a05048bec693caa6b/decorator-5.2.1.tar.gz", hash = "sha256:65f266143752f734b0a7cc83c46f4618af75b8c5911b00ccb61d0ac9b6da0360", size = 56711, upload-time = "2025-02-24T04:41:34.073Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/8c/f3147f5c4b73e7550fe5f9352eaa956ae838d5c51eb58e7a25b9f3e2643b/decorator-5.2.1-py3-none-any.whl", hash = "sha256:d316bb415a2d9e2d2b3abcc4084c6502fc09240e292cd76a76afc106a1c8e04a", size = 9190, upload-time = "2025-02-24T04:41:32.565Z" },
+]
+
+[[package]]
+name = "dnaio"
+version = "1.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "xopen" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a9/f2/3b4d7f4ac4fc25742fde4c5b50ed1bc60ab731cf8cabd3089dd11e4ea1c9/dnaio-1.2.4.tar.gz", hash = "sha256:a7570311f29e8b3c1ea39a60f57b7baf8dad8f2508595c58d4278c5571463166", size = 60430, upload-time = "2025-10-12T16:26:07.151Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/a0/4ddde293003c52256ce8e80a797e08467e9550d7487af8b6a7d76c7b2356/dnaio-1.2.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a55541a857fa1329cf600890ecedc605fa6963268500b1fcf5ee51d6c3c57cdc", size = 85696, upload-time = "2025-10-12T16:25:56.522Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/99/a041618c65bf31c1d8c5fd966aad0e7a9e86c43624743c62bbb4a944d106/dnaio-1.2.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5deda100d355f5275948d1863a199996a1a22077f147ca99514c24de87588250", size = 106062, upload-time = "2025-10-12T16:25:57.277Z" },
+    { url = "https://files.pythonhosted.org/packages/df/31/5aaa21f15ea149d9b95ab0c555abc29841b9209d93d5536065ef8684f47d/dnaio-1.2.4-cp312-cp312-win_amd64.whl", hash = "sha256:791bf2a1d377933c84b1e3c22d1b4b39608a85a17f613ce006256df267a28d69", size = 80587, upload-time = "2025-10-12T16:25:58.07Z" },
+    { url = "https://files.pythonhosted.org/packages/10/a8/2bff6f94930f4307f7488cc0f36e13cff20b26ff0ce90f8ca3d7569956fe/dnaio-1.2.4-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:264c11503c41934f2d8fe97fdd67ffb508081a424a576cac576ec3a4dfa2c41f", size = 85064, upload-time = "2025-10-12T16:25:58.864Z" },
+    { url = "https://files.pythonhosted.org/packages/99/de/bd4f173510ada57e874955dfae42051a6155b8297d5f7c0135bfe454106b/dnaio-1.2.4-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:660f84e462a9db574180b47cdf0bb7cb40b33842b86eec93f5c0e3c1b8df0d08", size = 105502, upload-time = "2025-10-12T16:25:59.572Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/e9/8508eeadb3573e4c6008d78cec006aa9f9615a16262fd25b7dbaa3775ed6/dnaio-1.2.4-cp313-cp313-win_amd64.whl", hash = "sha256:c14c75b890a21559b416e77a82dad078ff73fb4e05e39b4b45ee0f315b455063", size = 80417, upload-time = "2025-10-12T16:26:00.337Z" },
+    { url = "https://files.pythonhosted.org/packages/43/19/fe78c25785d293932b54c73ed6833538f8a541e4ebd25c14a0f56bda359f/dnaio-1.2.4-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:5cef3a9aff9a240a51fea13571f1efcf0c7a4f9a4878bdda8a362a95d529befe", size = 86361, upload-time = "2025-10-12T16:26:01.435Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/87/383393bcf0ee017f147054731d4f09dd4319e86c7ab037b7e6e3477fdf45/dnaio-1.2.4-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d176d4127c05cb808b956e05d3939edfc436f89671e62488fcb05b887cf57e7e", size = 106109, upload-time = "2025-10-12T16:26:02.176Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/3a/b1f2095d7950679b7018edac59465fc0dff1493e8542f8c0644351716a95/dnaio-1.2.4-cp314-cp314-win_amd64.whl", hash = "sha256:f620efbe299f6a32218e2eba36d1f550cf10eacbe7a42d9c590a7e6ac220980f", size = 81816, upload-time = "2025-10-12T16:26:03.175Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/c8/33dbd77f8c6dd3bd6a6c7473a2f9d5b70c8c1d50529750a3e82e013eab36/dnaio-1.2.4-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:87e1a2eaf55a9bdbf3f3ee0b7fb0b9fc94ced8b226023dc3db300dbee26b8e39", size = 90619, upload-time = "2025-10-12T16:26:03.923Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/ce/82036b1bdba0a4284da08a62af85b952095dcad97e7a1d2c0e4843c49d44/dnaio-1.2.4-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c8a8e1cba7ba300c48f4dda78c1d5dd2402762aa3454c0fcbd46d0d487d0df22", size = 105878, upload-time = "2025-10-12T16:26:04.66Z" },
+    { url = "https://files.pythonhosted.org/packages/17/8d/e545eb8680442e78e016e57ae82f50ce062efc56275ffd16c284cbbebd72/dnaio-1.2.4-cp314-cp314t-win_amd64.whl", hash = "sha256:a0dbcdddd14d946a03f4ad617d3b4630808295eecd9a38f670786675a8059606", size = 94420, upload-time = "2025-10-12T16:26:05.747Z" },
 ]
 
 [[package]]
@@ -376,10 +408,11 @@ wheels = [
 
 [[package]]
 name = "folitools"
-version = "0.3.2"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },
+    { name = "cutadapt" },
     { name = "cyclopts" },
     { name = "joblib" },
     { name = "matplotlib" },
@@ -429,6 +462,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "biopython", specifier = ">=1.85" },
+    { name = "cutadapt", git = "https://github.com/whatever60/cutadapt.git?rev=folitools-perf" },
     { name = "cyclopts", specifier = "==3.22.5" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=6.29.5" },
     { name = "ipython", marker = "extra == 'notebook'", specifier = ">=9.3.0" },

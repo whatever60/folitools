@@ -14,12 +14,53 @@ Install from PyPI:
 pip install folitools
 ```
 
-The dependencies from conda are also required:
+The dependencies from conda are also required (note: `cutadapt` is intentionally
+**not** in this list — see below):
 
 ```bash
 conda install -c bioconda -c conda-forge \
-  fastp cutadapt samtools bwa-mem2 star seqkit fastqc subread sambamba pigz
+  fastp samtools bwa-mem2 star seqkit fastqc subread sambamba pigz gcc
 ```
+
+### Cutadapt fork
+
+Starting with folitools 0.4.0, `cutadapt` is installed as a pinned git
+dependency from our fork [whatever60/cutadapt@folitools-perf][fork]. The
+fork adds several performance improvements that matter for the
+`foli assign-probes` workload (hundreds of i5/i7 primers, paired-end
+gzipped FASTQ inputs):
+
+- `SeedMultiAdapterFilter` — a seed-and-extend pre-filter for large
+  non-anchored multi-adapter groups. Match objects are **bit-identical**
+  to upstream cutadapt's per-adapter iteration; only the speed changes.
+  Auto-activates above 8 eligible adapters in a group.
+- `--input-compression-threads N` — opt-in parallel decompression of
+  gzipped inputs via `pigz`.
+- `NPrefixIndexedAdapters` — a dormant class that offers a fast path for
+  `^N{k}<body>` anchored adapters. Not wired into the auto path; reserved
+  for future opt-in use.
+
+End-to-end on a representative 3.1 M read-pair sample with 542×2 primers
+(`-j 16`), the combined effect of the fork plus the `xopen`/`pigz`-backed
+writer in `add_umi` cuts one sample from ~7:30 wall time to ~2:45
+(~2.7× faster).
+
+Because the fork contains Cython extensions, `pip install folitools` will
+compile `cutadapt` from source. A C compiler is required — the `gcc`
+entry in the conda command above covers it on Linux. On macOS the Xcode
+command-line tools suffice.
+
+If you would prefer the upstream cutadapt wheel on PyPI, you can override
+the pin with:
+
+```bash
+pip install --no-deps folitools
+pip install "cutadapt>=5.1" <other-deps>
+```
+
+but the `foli assign-probes` stage will be slower.
+
+[fork]: https://github.com/whatever60/cutadapt/tree/folitools-perf
 
 ## Usage
 

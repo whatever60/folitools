@@ -1,11 +1,18 @@
 [project]
 name = "folitools"
-version = "0.3.2"
+version = "0.4.0"
 description = "Foli-seq data processing and analysis tools"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
+    # cutadapt is pulled from our fork (whatever60/cutadapt@folitools-perf).
+    # The fork contains a SeedMultiAdapterFilter that speeds up matching of
+    # non-anchored multi-adapter groups (e.g. foli assign-probes with
+    # hundreds of i5/i7 primers) while returning bit-identical Match
+    # objects. Building the fork requires a C compiler (gcc, already
+    # listed in environment.yaml).
+    "cutadapt @ git+https://github.com/whatever60/cutadapt.git@folitools-perf",
     "cyclopts==3.22.5",
     "joblib>=1.5.1",
     "matplotlib>=3.10.3",

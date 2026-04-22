@@ -91,6 +91,13 @@ manifest-path = "rust/Cargo.toml"
 python-source = "src"
 module-name = "folitools._rust_native"
 features = ["python-extension"]
+# maturin auto-includes LICENSE in the wheel and adds `License-File: LICENSE`
+# to the metadata, but by default it does NOT put LICENSE inside the sdist.
+# PyPI's metadata 2.4 check then rejects the sdist ("License-File LICENSE
+# does not exist in distribution file"). Force-include it here.
+include = [
+    { path = "LICENSE", format = ["sdist", "wheel"] },
+]
 # primer_selection/data/** is large reference data; users fetch it on demand
 # rather than bundling it into every wheel. c/** is legacy scratch.
 exclude = [

@@ -6,6 +6,31 @@ Starting with version 0.3.2, releases are tracked here.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-04-22
+
+### Changed
+
+- `cutadapt` is now depended on as the PyPI distribution
+  [`cutadapt-folitools`](https://pypi.org/project/cutadapt-folitools/),
+  instead of a direct git URL. The installed Python module and CLI are
+  unchanged (still `import cutadapt`, still the `cutadapt` command).
+  Installing folitools no longer requires `git` or a C toolchain — users
+  get a prebuilt wheel when one is available for their platform.
+- Pinned to `cutadapt-folitools >= 5.3.1.post1`, which includes the
+  q-gram lemma tightening in `SeedMultiAdapterFilter` (see below).
+
+### Fixed (fork side)
+
+- `SeedMultiAdapterFilter.is_acceptable` now rejects adapters whose
+  pigeonhole-safe seed size falls below `MIN_SEED_SIZE`. Previously the
+  computed seed could be clamped up to 3 even when the q-gram lemma
+  required a smaller value, which could silently drop valid matches for
+  very short non-anchored adapters with a high error rate. No observable
+  effect on the `foli assign-probes` workload — the 542×2 primers yield
+  seed=6, safely above the floor. Tightening ensures bit-identical
+  semantics to upstream for all accepted adapter groups, not just the
+  ones we measured.
+
 ## [0.4.0] - 2026-04-22
 
 ### Changed

@@ -24,10 +24,12 @@ conda install -c bioconda -c conda-forge \
 
 ### Cutadapt fork
 
-Starting with folitools 0.4.0, `cutadapt` is installed as a pinned git
-dependency from our fork [whatever60/cutadapt@folitools-perf][fork]. The
-fork adds several performance improvements that matter for the
-`foli assign-probes` workload (hundreds of i5/i7 primers, paired-end
+Starting with folitools 0.4.1, `cutadapt` is pulled from our fork
+[whatever60/cutadapt@folitools-perf][fork], published to PyPI as
+[`cutadapt-folitools`][pypi-fork]. The installed Python module and
+console script are still `cutadapt`, so your shell pipelines do not
+change. The fork adds several performance improvements that matter for
+the `foli assign-probes` workload (hundreds of i5/i7 primers, paired-end
 gzipped FASTQ inputs):
 
 - `SeedMultiAdapterFilter` — a seed-and-extend pre-filter for large
@@ -45,10 +47,9 @@ End-to-end on a representative 3.1 M read-pair sample with 542×2 primers
 writer in `add_umi` cuts one sample from ~7:30 wall time to ~2:45
 (~2.7× faster).
 
-Because the fork contains Cython extensions, `pip install folitools` will
-compile `cutadapt` from source. A C compiler is required — the `gcc`
-entry in the conda command above covers it on Linux. On macOS the Xcode
-command-line tools suffice.
+`cutadapt-folitools` is currently distributed as an sdist; building it
+requires a C compiler. The `gcc` entry in the conda command above covers
+this on Linux; on macOS the Xcode command-line tools suffice.
 
 If you would prefer the upstream cutadapt wheel on PyPI, you can override
 the pin with:
@@ -61,6 +62,7 @@ pip install "cutadapt>=5.1" <other-deps>
 but the `foli assign-probes` stage will be slower.
 
 [fork]: https://github.com/whatever60/cutadapt/tree/folitools-perf
+[pypi-fork]: https://pypi.org/project/cutadapt-folitools/
 
 ## Usage
 

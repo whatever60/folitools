@@ -251,6 +251,46 @@ Output files:
 - `{sample_name}.group.log`: Processing logs showing statistics for each sample
 - Final count matrix: Gene × sample matrix in TSV format with gene symbols (if GTF provided) or gene IDs
 
+Pass `--output-raw` alongside (or instead of) `--output` to also write a
+pre-UMI-dedup matrix (one row per read rather than per UMI group). Both
+flags are independent — at least one must be set.
+
+### Step 5. Pipeline Summary Statistics
+
+`folitools.summary.summary_stats` aggregates per-sample read counts from
+every pipeline stage into a single `pandas.DataFrame`.
+
+```python
+from folitools.summary import summary_stats
+
+df = summary_stats(
+    fastq_stats="/path/to/fastq.stats",
+    fastp_stats="/path/to/fastp.stats",
+    star_logs="/path/to/star/*/Log.final.out",
+    add_tags_logs="/path/to/featurecounts/*.add_tags.log",
+    count_matrix_raw="/path/to/foli_counts_raw.tsv",
+    count_matrix_dedup="/path/to/foli_counts.tsv",
+)
+```
+
+The returned DataFrame is indexed by sample, with one column per stage:
+
+| Column | Meaning |
+| --- | --- |
+| `raw_depth` | Read pairs before fastp |
+| `pass_qc_depth` | Read pairs after fastp |
+| `long_read_depth` | Read pairs STAR attempted to align |
+| `good_umi_depth` | Reads with both UMIs well-formed |
+| `not_na_adapter_depth` | Reads with both UMIs and both primers assigned |
+| `properly_mapped_depth` | Reads that produced a count |
+| `n_umi` | Unique UMIs |
+| `n_genes` | Distinct genes detected |
+
+Any argument left as `None` yields an all-`NA` column. Because each
+stage only drops reads, the row is expected to be monotonically
+non-increasing; `summary_stats` raises `AssertionError` otherwise so
+pipeline regressions surface immediately.
+
 ## Primer Selection Functionality
 
 The primer selection module provides tools for designing and recovering PCR primer sets for targeted amplicon sequencing experiments.
@@ -527,4 +567,3 @@ In summary, the resulting count matrix has samples as rows and "enhanced" gene f
 
 ## TODOs
 
-- Add QC report code that summarizes all metrics into a table (need refactoring)

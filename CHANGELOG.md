@@ -6,6 +6,15 @@ Starting with version 0.3.2, releases are tracked here.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-23
+
+### Added
+
+- `foli summary` CLI command wrapping
+  `folitools.summary.summary_stats`. Aggregates per-sample read counts
+  from every pipeline stage into a single sample × metric table and
+  writes TSV/CSV chosen by the `--output` extension (`.gz` supported).
+
 ## [0.6.0] - 2026-04-23
 
 ### Added

@@ -148,3 +148,29 @@ def test_summary_stats_rejects_unnamed_add_tags_log(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="cell_tag=-"):
         summary_stats(add_tags_logs=str(tmp_path / "*.add_tags.log"))
+
+
+def test_summary_cli_writes_table(tmp_path: Path) -> None:
+    from folitools.cli import summary as summary_cmd
+
+    _write_seqkit_stats(
+        tmp_path / "fastq.stats",
+        [("s1_S1_R1_001.fastq.gz", 100), ("s1_S1_R2_001.fastq.gz", 100)],
+    )
+    _write_seqkit_stats(
+        tmp_path / "fastp.stats",
+        [("s1_1.fq.gz", 80), ("s1_2.fq.gz", 80)],
+    )
+
+    output = tmp_path / "summary.tsv"
+    summary_cmd(
+        output=str(output),
+        fastq_stats=str(tmp_path / "fastq.stats"),
+        fastp_stats=str(tmp_path / "fastp.stats"),
+    )
+
+    df = pd.read_csv(output, sep="\t", index_col=0)
+    assert df.index.name.startswith("folitools ")
+    assert list(df.columns) == list(METRIC_COLUMNS)
+    assert df.loc["s1", "raw_depth"] == 100
+    assert df.loc["s1", "pass_qc_depth"] == 80

@@ -257,23 +257,19 @@ flags are independent — at least one must be set.
 
 ### Step 5. Pipeline Summary Statistics
 
-`folitools.summary.summary_stats` aggregates per-sample read counts from
-every pipeline stage into a single `pandas.DataFrame`.
-
-```python
-from folitools.summary import summary_stats
-
-df = summary_stats(
-    fastq_stats="/path/to/fastq.stats",
-    fastp_stats="/path/to/fastp.stats",
-    star_logs="/path/to/star/*/Log.final.out",
-    add_tags_logs="/path/to/featurecounts/*.add_tags.log",
-    count_matrix_raw="/path/to/foli_counts_raw.tsv",
-    count_matrix_dedup="/path/to/foli_counts.tsv",
-)
+```bash
+foli summary \
+    --output foli_summary.tsv \
+    --fastq-stats /path/to/fastq.stats \
+    --fastp-stats /path/to/fastp.stats \
+    --star-logs '/path/to/star/*/Log.final.out' \
+    --add-tags-logs '/path/to/featurecounts/*.add_tags.log' \
+    --count-matrix-raw /path/to/foli_counts_raw.tsv \
+    --count-matrix-dedup /path/to/foli_counts.tsv
 ```
 
-The returned DataFrame is indexed by sample, with one column per stage:
+Writes a sample × metric table (TSV/CSV chosen by `--output` extension;
+`.gz` suffixes are supported). Each column tracks one pipeline stage:
 
 | Column | Meaning |
 | --- | --- |
@@ -286,10 +282,10 @@ The returned DataFrame is indexed by sample, with one column per stage:
 | `n_umi` | Unique UMIs |
 | `n_genes` | Distinct genes detected |
 
-Any argument left as `None` yields an all-`NA` column. Because each
-stage only drops reads, the row is expected to be monotonically
-non-increasing; `summary_stats` raises `AssertionError` otherwise so
-pipeline regressions surface immediately.
+Any flag left unset yields an all-`NA` column. Because each stage only
+drops reads, the row is expected to be monotonically non-increasing;
+`foli summary` raises `AssertionError` otherwise so pipeline
+regressions surface immediately.
 
 ## Primer Selection Functionality
 

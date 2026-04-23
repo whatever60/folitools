@@ -9,6 +9,7 @@ from cyclopts import App, Parameter
 from . import __version__
 from .get_matrix import read_counts
 from .primer_info import get_read_stats
+from .summary import summary_stats
 from .utils import expand_path_to_list
 
 app = App(help="Foli Tools CLI")
@@ -264,6 +265,66 @@ def get_count_mtx(
             index_label=f"folitools {__version__}",
             header=True,
         )
+
+
+@app.command(help="Aggregate per-sample pipeline-stage read counts")
+def summary(
+    *,
+    output: Annotated[
+        str,
+        Parameter(help="Output path for the sample × metric table (.tsv/.csv/.txt, .gz ok)"),
+    ],
+    fastq_stats: Annotated[
+        str | None,
+        Parameter(help="seqkit --tabular stats file over raw input FASTQs (foli qc input)"),
+    ] = None,
+    fastp_stats: Annotated[
+        str | None,
+        Parameter(help="seqkit --tabular stats file over fastp-trimmed FASTQs (foli qc output)"),
+    ] = None,
+    star_logs: Annotated[
+        list[str] | None,
+        Parameter(
+            consume_multiple=True,
+            help="Glob/path/list of STAR Log.final.out files (parent dir name = sample)",
+        ),
+    ] = None,
+    add_tags_logs: Annotated[
+        list[str] | None,
+        Parameter(
+            consume_multiple=True,
+            help="Glob/path/list of foli_add_tags --log files (SUMMARY lines keyed by cell_tag)",
+        ),
+    ] = None,
+    count_matrix_raw: Annotated[
+        str | None,
+        Parameter(help="Pre-dedup count matrix from foli get-count-mtx --output-raw"),
+    ] = None,
+    count_matrix_dedup: Annotated[
+        str | None,
+        Parameter(help="UMI-dedup count matrix from foli get-count-mtx --output"),
+    ] = None,
+) -> None:
+    """Aggregate per-sample read counts from each pipeline stage into one table.
+
+    Any source left unset yields an all-NA column. Columns are ordered so a
+    healthy run is monotonically non-increasing across each row; an assertion
+    fires otherwise so pipeline regressions surface immediately.
+    """
+    df = summary_stats(
+        fastq_stats=fastq_stats,
+        fastp_stats=fastp_stats,
+        star_logs=star_logs,
+        add_tags_logs=add_tags_logs,
+        count_matrix_raw=count_matrix_raw,
+        count_matrix_dedup=count_matrix_dedup,
+    )
+    df.to_csv(
+        output,
+        sep=_separator_for(output),
+        index_label=f"folitools {__version__}",
+        header=True,
+    )
 
 
 @app.command(help="Get read statistics from FASTQ files after primer assignment")

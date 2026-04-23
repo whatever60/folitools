@@ -81,7 +81,7 @@ def add_tags_wo_fastq(
                 if id(r) not in keep:
                     r.flag |= 0x100
 
-        # Join unique XS tags, filter out any "Unassigned" tags if others exist
+        # Join unique XT tags, filter out any "Unassigned" tags if others exist
         genes = {
             gene for tag in xt_tags if tag != "Unassigned" for gene in tag.split(",")
         }
@@ -89,8 +89,10 @@ def add_tags_wo_fastq(
             gene_with_primer = ",".join(sorted(genes) + [primers])
         else:
             gene_with_primer = ",".join(["Unassigned", primers])
-        for _, read in primary_alignments:
-            if not (read.is_secondary or read.is_supplementary):
+        # XF is stamped on primary R1 only; R2 is passed through untouched
+        # (umi_tools group/count in --paired mode only inspects R1).
+        for key, read in primary_alignments:
+            if key == "R1" and not (read.is_secondary or read.is_supplementary):
                 read.set_tag(
                     gene_with_primer_tag_name, gene_with_primer, value_type="Z"
                 )
@@ -133,35 +135,42 @@ def add_tags_wo_fastq(
             is_read1 = (flag & 0x40) != 0
             is_not_primary = (flag & 0x900) != 0
 
-            if cell_tag_set:
-                read.set_tag(cell_tag_name, cell_tag, value_type="Z")
+            # Custom tags (CB/US/PR/UC/XN/XT default) go on R1 only:
+            # umi_tools group/count in --paired mode only inspects R1, so
+            # mirroring these onto R2 is redundant work.
+            if is_read1:
+                if cell_tag_set:
+                    read.set_tag(cell_tag_name, cell_tag, value_type="Z")
 
-            read.set_tag(
-                umi_tag_s_name, umi1 if is_read1 else umi2, value_type="Z"
-            )
-            read.set_tag(primer_tag_name, primers, value_type="Z")
+                read.set_tag(umi_tag_s_name, umi1, value_type="Z")
+                read.set_tag(primer_tag_name, primers, value_type="Z")
 
-            # Short-circuit chain beats building a list + all().
-            if (
-                len(umi1) == umi_length
-                and len(umi2) == umi_length
-                and "N" not in umi1
-                and "N" not in umi2
-                and primer_fwd != "no_adapter"
-                and primer_rev != "no_adapter"
-            ):
-                read.set_tag(umi_tag_s_correct_name, umi1 + umi2, value_type="Z")
+                # Short-circuit chain beats building a list + all().
+                if (
+                    len(umi1) == umi_length
+                    and len(umi2) == umi_length
+                    and "N" not in umi1
+                    and "N" not in umi2
+                    and primer_fwd != "no_adapter"
+                    and primer_rev != "no_adapter"
+                ):
+                    read.set_tag(umi_tag_s_correct_name, umi1 + umi2, value_type="Z")
 
-            # XT fallback. We also cache the value we'll need for XF so we
-            # don't call get_tag a second time at the bottom of the loop.
-            if read.has_tag("XT"):
-                xt_value = read.get_tag("XT")
+                # XT fallback for R1. Trust featureCounts for R2.
+                if read.has_tag("XT"):
+                    xt_value = read.get_tag("XT")
+                else:
+                    # featureCounts did not assign — should be an
+                    # "Unassigned_*" case.
+                    read.set_tag("XN", -1, value_type="i")
+                    read.set_tag("XT", "Unassigned", value_type="Z")
+                    xt_value = "Unassigned"
             else:
-                # featureCounts did not assign — should be an "Unassigned_*"
-                # case. Debug assertion was dropped; trust featureCounts.
-                read.set_tag("XN", -1, value_type="i")
-                read.set_tag("XT", "Unassigned", value_type="Z")
-                xt_value = "Unassigned"
+                # R2: read XT (if present) for XF aggregation, but do not
+                # write tags. R2's XT comes straight from featureCounts.
+                xt_value = (
+                    read.get_tag("XT") if read.has_tag("XT") else "Unassigned"
+                )
 
             if is_not_primary:
                 bam_out.write(read)

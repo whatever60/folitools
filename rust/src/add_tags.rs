@@ -136,6 +136,13 @@ pub fn run(args: Args) -> Result<()> {
     let mut primary_batch: Vec<Record> = Vec::new();
     let mut xt_values: Vec<Vec<u8>> = Vec::new();
 
+    // Per-QNAME counters, incremented on the primary R1 only so each read pair
+    // contributes exactly once. Emitted at program end via the SUMMARY line in
+    // --log, consumed by folitools.summary.summary_stats.
+    let mut total_r1_count: u64 = 0;
+    let mut good_umi_count: u64 = 0;
+    let mut not_na_adapter_count: u64 = 0;
+
     let mut record = Record::new();
 
     loop {
@@ -193,43 +200,73 @@ pub fn run(args: Args) -> Result<()> {
 
         record.set_qname(&id);
 
-        if let Some(cv) = args.cell_tag.as_deref() {
-            let _ = record.remove_aux(cell_tag_name_bytes);
-            record.push_aux(cell_tag_name_bytes, Aux::String(cv))?;
-        }
-
-        let criteria_ok = umi1.len() == UMI_LEN
-            && umi2.len() == UMI_LEN
-            && !umi1.contains(&b'N')
-            && !umi2.contains(&b'N')
-            && primer_fwd.as_slice() != b"no_adapter"
-            && primer_rev.as_slice() != b"no_adapter";
-
         let flag = record.flags();
         let is_read1 = (flag & 0x40) != 0;
-        let us_value = if is_read1 { &umi1 } else { &umi2 };
-        let us_str = std::str::from_utf8(us_value).context("UMI not UTF-8")?;
-        let _ = record.remove_aux(TAG_US);
-        record.push_aux(TAG_US, Aux::String(us_str))?;
+        let is_primary = (flag & 0x900) == 0;
 
-        let pr_str = std::str::from_utf8(&primers).context("primers not UTF-8")?;
-        let _ = record.remove_aux(TAG_PR);
-        record.push_aux(TAG_PR, Aux::String(pr_str))?;
-
-        if criteria_ok {
-            let mut uc = Vec::with_capacity(umi1.len() + umi2.len());
-            uc.extend_from_slice(&umi1);
-            uc.extend_from_slice(&umi2);
-            let uc_str = std::str::from_utf8(&uc).context("UC not UTF-8")?;
-            let _ = record.remove_aux(TAG_UC);
-            record.push_aux(TAG_UC, Aux::String(uc_str))?;
+        // Count per-QNAME stats on the primary R1 so each read pair contributes
+        // once. good_umi is UMI-only; not_na_adapter additionally requires both
+        // primers assigned (== criteria_ok below), making it a subset of
+        // good_umi so summary_stats' monotonic-non-increasing assert holds.
+        if is_read1 && is_primary {
+            total_r1_count += 1;
+            let umi_ok = umi1.len() == UMI_LEN
+                && umi2.len() == UMI_LEN
+                && !umi1.contains(&b'N')
+                && !umi2.contains(&b'N');
+            let adapter_ok = primer_fwd.as_slice() != b"no_adapter"
+                && primer_rev.as_slice() != b"no_adapter";
+            if umi_ok {
+                good_umi_count += 1;
+            }
+            if umi_ok && adapter_ok {
+                not_na_adapter_count += 1;
+            }
         }
 
-        if record.aux(TAG_XT).is_err() {
-            record.push_aux(TAG_XN, Aux::I32(-1))?;
-            record.push_aux(TAG_XT, Aux::String("Unassigned"))?;
+        // Custom tags (CB/US/PR/UC/XN/XT default) are written to R1 only:
+        // umi_tools group/count in --paired mode only inspects R1, so mirroring
+        // them onto R2 was redundant work.
+        if is_read1 {
+            if let Some(cv) = args.cell_tag.as_deref() {
+                let _ = record.remove_aux(cell_tag_name_bytes);
+                record.push_aux(cell_tag_name_bytes, Aux::String(cv))?;
+            }
+
+            let criteria_ok = umi1.len() == UMI_LEN
+                && umi2.len() == UMI_LEN
+                && !umi1.contains(&b'N')
+                && !umi2.contains(&b'N')
+                && primer_fwd.as_slice() != b"no_adapter"
+                && primer_rev.as_slice() != b"no_adapter";
+
+            let us_str = std::str::from_utf8(&umi1).context("UMI not UTF-8")?;
+            let _ = record.remove_aux(TAG_US);
+            record.push_aux(TAG_US, Aux::String(us_str))?;
+
+            let pr_str = std::str::from_utf8(&primers).context("primers not UTF-8")?;
+            let _ = record.remove_aux(TAG_PR);
+            record.push_aux(TAG_PR, Aux::String(pr_str))?;
+
+            if criteria_ok {
+                let mut uc = Vec::with_capacity(umi1.len() + umi2.len());
+                uc.extend_from_slice(&umi1);
+                uc.extend_from_slice(&umi2);
+                let uc_str = std::str::from_utf8(&uc).context("UC not UTF-8")?;
+                let _ = record.remove_aux(TAG_UC);
+                record.push_aux(TAG_UC, Aux::String(uc_str))?;
+            }
+
+            if record.aux(TAG_XT).is_err() {
+                record.push_aux(TAG_XN, Aux::I32(-1))?;
+                record.push_aux(TAG_XT, Aux::String("Unassigned"))?;
+            }
         }
 
+        // XT is aggregated across every alignment of this QNAME (both mates,
+        // plus any secondary/supplementary) so XF reflects the full
+        // feature-assignment set for the read pair. R2's XT comes straight
+        // from featureCounts; fall back to "Unassigned" if absent.
         let xt_val: Vec<u8> = match record.aux(TAG_XT) {
             Ok(Aux::String(s)) => s.as_bytes().to_vec(),
             _ => b"Unassigned".to_vec(),
@@ -252,6 +289,20 @@ pub fn run(args: Args) -> Result<()> {
             &mut writer,
             log_fh.as_mut(),
         )?;
+    }
+
+    // Single-line summary consumed by folitools.summary.summary_stats. Written
+    // only when --log is set so we don't silently create state without user
+    // intent. cell_tag=- when --cell_tag is unset so the field position stays
+    // stable for parsers.
+    if let Some(fh) = log_fh.as_mut() {
+        let cell_tag_field = args.cell_tag.as_deref().unwrap_or("-");
+        writeln!(
+            fh,
+            "SUMMARY cell_tag={} total_r1={} good_umi={} not_na_adapter={}",
+            cell_tag_field, total_r1_count, good_umi_count, not_na_adapter_count
+        )
+        .context("write SUMMARY line to log")?;
     }
 
     Ok(())
@@ -366,8 +417,13 @@ fn finalize_group(
     }
     let xf_str = std::str::from_utf8(&xf_value).context("XF contains non-UTF-8 bytes")?;
 
+    // XF is stamped on primary R1 only; R2 is passed through untouched
+    // (umi_tools group/count in --paired mode only inspects R1).
     for r in primaries.iter_mut() {
-        if (r.flags() & 0x900) == 0 {
+        let f = r.flags();
+        let is_primary = (f & 0x900) == 0;
+        let is_read1 = (f & 0x40) != 0;
+        if is_primary && is_read1 {
             let _ = r.remove_aux(TAG_XF);
             r.push_aux(TAG_XF, Aux::String(xf_str))?;
         }

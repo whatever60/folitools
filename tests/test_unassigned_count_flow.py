@@ -13,7 +13,11 @@ from folitools.get_matrix import read_counts
 
 
 def test_add_tags_keeps_unassigned_primary_pair(tmp_path: Path) -> None:
-    """Primary pairs with no assigned genes should still be written with XF."""
+    """Primary pairs with no assigned genes should still have R1 stamped with XF.
+
+    umi_tools group/count in --paired mode only inspects R1, so add_tags
+    writes CB/UC/XF to R1 only; R2 is passed through untouched.
+    """
     input_bam = tmp_path / "input.bam"
     output_bam = tmp_path / "output.bam"
 
@@ -59,9 +63,16 @@ def test_add_tags_keeps_unassigned_primary_pair(tmp_path: Path) -> None:
         reads = list(bam_in.fetch(until_eof=True))
 
     assert len(reads) == 2
-    assert all(read.get_tag("XF") == "Unassigned,FGR+FGR" for read in reads)
-    assert all(read.get_tag("CB") == "sample1" for read in reads)
-    assert all(read.get_tag("UC") == "AAAAAATTTTTT" for read in reads)
+    r1 = next(r for r in reads if r.is_read1)
+    r2 = next(r for r in reads if r.is_read2)
+
+    assert r1.get_tag("XF") == "Unassigned,FGR+FGR"
+    assert r1.get_tag("CB") == "sample1"
+    assert r1.get_tag("UC") == "AAAAAATTTTTT"
+
+    assert not r2.has_tag("XF")
+    assert not r2.has_tag("CB")
+    assert not r2.has_tag("UC")
 
 
 def test_read_counts_filters_unassigned_gene_prefix(tmp_path: Path) -> None:

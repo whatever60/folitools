@@ -6,6 +6,41 @@ Starting with version 0.3.2, releases are tracked here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-23
+
+### Added
+
+- `folitools.summary.summary_stats`: new library function that aggregates
+  per-sample read counts from every pipeline stage — seqkit stats
+  (raw and fastp-trimmed), STAR `Log.final.out`, `foli_add_tags`
+  SUMMARY logs, and raw/dedup count matrices — into a single
+  `sample × metric` DataFrame (`Int64`). Any source left `None` yields
+  an all-`NA` column. Columns are ordered so a healthy run is
+  monotonically non-increasing across each row; the function asserts
+  this invariant so pipeline regressions surface immediately.
+- `foli get-count-mtx --output-raw`: writes a pre-UMI-dedup (read-count)
+  matrix alongside or instead of `--output`. At least one of the two
+  must be set; both can be written in one invocation and share the
+  same input scan.
+- `foli_add_tags` now writes a single-line `SUMMARY` record to the
+  `--log` file at program end, capturing per-run `total_r1`,
+  `good_umi`, and `not_na_adapter` counts. Consumed by `summary_stats`
+  to drive the `good_umi_depth` / `not_na_adapter_depth` columns.
+
+### Changed
+
+- `foli_add_tags` (both the Rust binary and the Python reference
+  implementation) now stamps `CB` / `US` / `PR` / `UC` / `XN` / `XT` on
+  the primary R1 only. `umi_tools group`/`count` in `--paired` mode
+  only inspects R1, so mirroring these onto R2 was redundant and
+  caused downstream raw read counting to double the true value.
+  R2 is passed through with its featureCounts-assigned `XT` preserved
+  for the `XF` aggregation.
+- `folitools.get_matrix.process_count_file_simple` now explicitly
+  asserts that `read_id` is unique in each `group.tsv.gz`, protecting
+  the new raw-count path (and the existing dedup path) from silent
+  double-counting if the primary-R1-only invariant is ever broken.
+
 ## [0.5.0] - 2026-04-22
 
 ### Added

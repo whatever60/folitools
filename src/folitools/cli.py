@@ -214,28 +214,56 @@ def count(
     run("foli_04_count.sh", (input_patterns, output_dir, str(cores), str(skip)))
 
 
+def _separator_for(path: str) -> str:
+    if any(path.endswith(ext) for ext in [".tsv", ".txt", ".tsv.gz", ".txt.gz"]):
+        return "\t"
+    if any(path.endswith(ext) for ext in [".csv", ".csv.gz"]):
+        return ","
+    raise ValueError(
+        f"Output file must end with .tsv, .txt, .tsv.gz, or .txt.gz: {path!r}"
+    )
+
+
 @app.command(help="Generate count matrix")
 def get_count_mtx(
     *,
     input_: list[str],
-    output: Annotated[str, Parameter(help="Output file path (default: stdout)")],
+    output: Annotated[
+        str | None,
+        Parameter(help="Output path for the UMI-deduplicated count matrix"),
+    ] = None,
+    output_raw: Annotated[
+        str | None,
+        Parameter(help="Output path for the pre-dedup (raw read count) matrix"),
+    ] = None,
     gtf: str | None = None,
 ) -> None:
     """
     Args:
         input_: A file path, glob pattern, or list of file paths.
+        output: Optional output path for the UMI-deduplicated matrix.
+        output_raw: Optional output path for the pre-dedup read-count matrix.
         gtf: Optional path to a GTF file for gene_id→gene_symbol mapping.
     """
-    df = read_counts(input_, gtf)
-    if any(output.endswith(ext) for ext in [".tsv", ".txt", ".tsv.gz", ".txt.gz"]):
-        sep = "\t"
-    elif any(output.endswith(ext) for ext in [".csv", ".csv.gz"]):
-        sep = ","
-    else:
-        raise ValueError(
-            f"Output file must end with .tsv, .txt, .tsv.gz, or .txt.gz: {output!r}"
+    if output is None and output_raw is None:
+        raise ValueError("At least one of --output or --output-raw must be set")
+
+    if output is not None:
+        df = read_counts(input_, gtf, dedup_umi=True)
+        df.to_csv(
+            output,
+            sep=_separator_for(output),
+            index_label=f"folitools {__version__}",
+            header=True,
         )
-    df.to_csv(output, sep=sep, index_label=f"folitools {__version__}", header=True)
+    if output_raw is not None:
+        df = read_counts(input_, gtf, dedup_umi=False)
+        df.to_csv(
+            output_raw,
+            sep=_separator_for(output_raw),
+            index_label=f"folitools {__version__}",
+            header=True,
+        )
 
 
 @app.command(help="Get read statistics from FASTQ files after primer assignment")

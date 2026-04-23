@@ -52,6 +52,7 @@ const TAG_PR: &[u8; 2] = b"PR";
 const TAG_XF: &[u8; 2] = b"XF";
 const TAG_XT: &[u8; 2] = b"XT";
 const TAG_XN: &[u8; 2] = b"XN";
+const TAG_HI: &[u8; 2] = b"HI";
 
 /// Parse `argv` (argv[0] is the program name) and run the tag-adding pipeline.
 /// Returns 0 on success, non-zero on usage or runtime failure.
@@ -304,10 +305,35 @@ fn finalize_group(
         if let Some(&i) = r2_idxs.first() {
             keep.insert(i);
         }
+        // The extras we're about to downgrade are the "ghost" unmapped
+        // mate of a SECONDARY alignment that STAR forgot to mark
+        // secondary. See STAR issue #2190
+        // (https://github.com/alexdobin/STAR/issues/2190), reported
+        // 2024-08 against 2.7.10b and 2.7.11b, still open and unresolved
+        // as of the latest release (2.7.11b, 2024-01-26). Same bug also
+        // leaves `HI:i:<n>` at 0 on these ghosts — which, after we flip
+        // 0x100, looks like a multimap secondary carrying the primary
+        // pair's hit index. We tried fixing at the STAR layer with
+        // `--chimSegmentMin 12` but that controls chimeric-junction
+        // emission, not the mate-pairing code path; verified on a
+        // targeted reproduction with the exact CSF2RA+TIRAP read pairs
+        // from a prior production warning (e.g.
+        // LH00328:76:22G7CJLT3:4:2187:9174:22278) — 7/7 still produce
+        // the anomaly even with the flag set. Only downstream patching
+        // neutralizes it, which is what this block does.
+        //
+        // We can't reconstruct the correct HI without buffering every
+        // secondary record of the QNAME (the downgraded record's PNEXT
+        // points at a secondary that was already flushed to the output
+        // stream). Leaving a stale `HI:i:0` on a non-primary is worse
+        // than having no HI: it collides with the primary pair's HI
+        // under naive readers. Strip it — RNEXT/PNEXT still uniquely
+        // identifies the mate.
         for (i, r) in primaries.iter_mut().enumerate() {
             if !keep.contains(&i) {
                 let f = r.flags();
                 r.set_flags(f | 0x100);
+                let _ = r.remove_aux(TAG_HI);
             }
         }
     }

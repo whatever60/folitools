@@ -114,7 +114,6 @@ from functools import lru_cache
 import pandas as pd
 from Bio import SeqIO
 
-from ._versioning import write_versioned_tsv
 from .saddle_utils import choice_except
 
 
@@ -396,9 +395,7 @@ def load_primer_data(
         primer_info_pool: {gene -> [(design, seq_f, seq_r), ...]}
         primers:  Flattened list of all sequences for precomputation.
     """
-    # comment='#' skips the leading `# folitools <version>` line written by
-    # `write_versioned_tsv` in _01 subset's output.
-    df = pd.read_csv(input_, sep="\t", comment="#")
+    df = pd.read_csv(input_, sep="\t")
     print(f"Loaded {len(df)} primer records")
 
     primer_info_pool: dict[str, list[tuple[str, str, str]]] = {}
@@ -563,7 +560,7 @@ def saddle(
     print("Finished!")
 
     loss_df = pd.DataFrame({"saddle_loss": list_saddle_loss})
-    write_versioned_tsv(loss_df, output_loss, header=False)
+    loss_df.to_csv(output_loss, sep="\t", index=False, header=False)
 
     rows = []
     for i, gene in enumerate(genes):
@@ -578,7 +575,7 @@ def saddle(
             }
         )
     results_df = pd.DataFrame(rows)
-    write_versioned_tsv(results_df, output)
+    results_df.to_csv(output, sep="\t", index=False)
 
     print("Results saved:")
     print(f"  - Final primers: {output} ({len(results_df)} records)")

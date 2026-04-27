@@ -14,10 +14,6 @@ from Bio.SeqRecord import SeqRecord
 
 # Local imports
 from .. import __version__
-from ._versioning import (
-    write_versioned_csv,
-    write_versioned_excel,
-)
 from .recover_plot import make_report
 from .utils import get_prefixes, resolve_reference_path, LINKER1, LINKER2
 from .recover_utils import simplify_gene_list
@@ -868,7 +864,7 @@ def recover(
     _sanity_check_seqkit_patterns(locate_df)
 
     if output_locate_df:
-        write_versioned_csv(locate_df, output_locate_df)
+        locate_df.to_csv(output_locate_df, index=False)
         logger.info(f"Saved locate_df to {Path(output_locate_df).resolve()}")
 
     # Enrich locate dataframe
@@ -878,7 +874,7 @@ def recover(
     _sanity_check_sequence_lengths(locate_df_final)
 
     if output_locate_df_final:
-        write_versioned_csv(locate_df_final, output_locate_df_final)
+        locate_df_final.to_csv(output_locate_df_final, index=False)
         logger.info(f"Saved locate_df_final to {Path(output_locate_df_final).resolve()}")
 
     # Enumerate and filter amplicons
@@ -904,7 +900,7 @@ def recover(
     amplicon_all["pass"] = length_pass & type_pass
     
     if output_amplicon_all:
-        write_versioned_csv(amplicon_all, output_amplicon_all)
+        amplicon_all.to_csv(output_amplicon_all, index=False)
         logger.info(f"Saved amplicon_all to {Path(output_amplicon_all).resolve()}")
     
     # Create subset for sanity checks (only passing amplicons)
@@ -928,7 +924,7 @@ def recover(
     _sanity_check_primer_pair_relationships(grouped)
 
     if output_grouped:
-        write_versioned_csv(grouped, output_grouped)
+        grouped.to_csv(output_grouped, index=False)
         logger.info(f"Saved grouped to {Path(output_grouped).resolve()}")
 
     summary_df = _build_summary_df(grouped, fwd_prefix, rev_prefix, chosen_index=0)
@@ -937,7 +933,7 @@ def recover(
     if output_order_excel is not None:
         out_xlsx = Path(output_order_excel)
         out_xlsx.parent.mkdir(parents=True, exist_ok=True)
-        write_versioned_excel(summary_df, out_xlsx, index=False)
+        summary_df.to_excel(out_xlsx, index=False)
 
     # Create SeqRecord lists for i5/i7 short FASTAs
     i5_records = _create_fasta_records(

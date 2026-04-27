@@ -74,31 +74,22 @@ Starting with version 0.3.2, releases are tracked here.
   - `<dir>.stats` (seqkit `--tabular`) is intentionally **not**
     decorated — it's a strict TSV consumed by `summary_stats` and any
     extra line breaks parsing.
-- The same treatment is now applied to every `foli-primer` subcommand:
-  - `subset`, `saddle`, `sgad`: TSV outputs (primer info, selected
-    primers, loss trajectories) carry a leading
-    `# folitools <version>` line. Internal pandas readers across
-    `foli-primer` pass `comment='#'` so the marker is transparently
-    skipped on parse.
-  - `summary` and `recover`: xlsx outputs (`primer_to_order.xlsx`,
-    `primer_to_order_idt.xlsx`, `summary_primer_to_order.xlsx`) carry
-    the version in the workbook's `properties.description` core
-    property — visible via Excel's "File → Info → Properties" dialog
-    or `openpyxl.load_workbook(...).properties.description`.
-  - `recover`: CSV outputs (`locate_df.csv`, `locate_df_final.csv`,
-    `amplicon_all.csv`, `grouped.csv`) get the same `#`-comment line
-    as the TSV outputs. The PDF report's `Producer` metadata field
-    carries the version (visible in any PDF reader's Document
-    Properties pane). The `recover.log` text log already carries the
-    version via a `logger.info` line at the top.
-  - `product` and `recover` FASTA outputs are intentionally **not**
-    stamped: cutadapt's dnaio reader rejects `;` comment lines and
-    Biopython's default `fasta` reader has deprecated `#` ones, so any
-    in-file marker risks breaking downstream consumers (`foli
-    assign-probes` ingests `recover`'s i5/i7 FASTAs through cutadapt).
-    Reproducibility for these is covered by the sibling
-    `recover.log`. The packaging helpers live in
-    `folitools.primer_selection._versioning`.
+- `foli-primer` subcommands also stamp, but at most once per command
+  and only into surfaces that don't disturb the file's primary
+  content:
+  - `summary`: workbook `properties.description` core property on each
+    xlsx output (`primer_to_order.xlsx`, `primer_to_order_idt.xlsx`).
+    Visible via Excel's "File → Info → Properties" dialog or
+    `openpyxl.load_workbook(...).properties.description`.
+  - `recover`: a single `logger.info` line at the top of `recover.log`.
+    The CSV / xlsx / PDF / FASTA outputs are deliberately uncluttered.
+  - `subset`, `saddle`, `sgad`, `product`: no per-command stamp.
+    Their outputs are non-matrix TSVs or a FASTA; in either case any
+    in-file marker would either pollute the table (no empty top-left
+    cell to repurpose like `foli get-count-mtx` has) or break a
+    downstream parser (cutadapt's dnaio rejects `;` comments;
+    Biopython's `fasta` reader deprecated `#` ones). The xlsx helper
+    lives in `folitools.primer_selection._versioning`.
 
 ### Changed
 

@@ -65,7 +65,6 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 
-from ._versioning import write_versioned_tsv
 from .data_dir_resolve import _data_dir_for_species
 
 
@@ -304,9 +303,8 @@ def subset(
                 info_f, seq_f, genes_with_any
             )
 
-    # Save outputs (with leading `# folitools <version>` line — internal
-    # readers downstream pass comment='#' to skip it).
-    write_versioned_tsv(info_f, output_primer_info)
+    # Save outputs
+    info_f.to_csv(output_primer_info, sep="\t", index=False)
     # tx_f.to_csv(out_tx, sep="\t", index=False)
 
     print(f"Wrote: {output_primer_info}")

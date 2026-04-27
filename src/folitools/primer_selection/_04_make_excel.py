@@ -102,12 +102,9 @@ def summary(
         pd.DataFrame: A DataFrame containing the primer ordering information with 
         all necessary columns for further processing or analysis.
     """
-    # comment='#' skips any leading `# folitools <version>` line stamped
-    # by the saddle/sgad and subset stages. Harmless on the user-supplied
-    # gene table (which is unstamped).
-    selection = pd.read_table(primer_selection, comment="#")
-    primer_info_df = pd.read_table(primer_info, comment="#")
-    df_gene = pd.read_table(input_, comment="#")
+    selection = pd.read_table(primer_selection)
+    primer_info_df = pd.read_table(primer_info)
+    df_gene = pd.read_table(input_)
     df_gene = df_gene.rename({"gene": "geneSymbol"}, axis=1)
 
     if "group" in df_gene.columns:

@@ -65,6 +65,7 @@ from ._02_select_primer_set_by_sgad import sgad as _sgad
 from ._03_extract_region_sequence import product as _product
 from ._04_make_excel import summary as _summary
 from ._05_recover import recover as _recover
+from ._versioning import default_command_log_path
 
 
 app = App(name="folitools-primer")
@@ -77,6 +78,7 @@ def subset(
     species: str,
     amplicon_size_range: tuple[int, int],
     output_primer_info: Path,
+    log: Path | None = None,
 ) -> int:
     """Run the subset stage (packaged Parquet → filtered TSVs).
 
@@ -85,15 +87,22 @@ def subset(
         species: Species key (e.g., "mouse") mapping to packaged data.
         amplicon_size_range: Two integers MIN MAX. Example: `--amplicon-size-range 320 380`.
         output_primer_info: Output path for primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
+        log: Path to a per-run log file. Defaults to
+            ``<output-primer-info-dir>/subset.log``. The first line of
+            the log is the folitools version, followed by the resolved
+            inputs and counts.
 
     Returns:
         Process exit code.
     """
+    if log is None:
+        log = default_command_log_path(output_primer_info, "subset")
     _ = _subset(
         species=species,
         amplicon_size_range=amplicon_size_range,
         gene_table_file=input_,
         output_primer_info=output_primer_info,
+        log_file=log,
     )
     # _subset now returns a dict with DataFrames, so we return 0 for success
     return 0
@@ -108,6 +117,7 @@ def saddle(
     num_cycles_anneal: int = 50,
     random_seed: int = 42,
     background_fasta: Path | None = None,
+    log: Path | None = None,
 ) -> int:
     """Run SADDLE to choose a low-interaction primer set.
 
@@ -118,10 +128,15 @@ def saddle(
         num_cycles_anneal: Annealing iterations.
         random_seed: RNG seed for reproducibility.
         background_fasta: Optional FASTA file with additional primers to include in the pool.
+        log: Path to a per-run log file. Defaults to
+            ``<output-dir>/saddle.log``. First line is the folitools
+            version, followed by the resolved inputs and key parameters.
 
     Returns:
         Process exit code.
     """
+    if log is None:
+        log = default_command_log_path(output, "saddle")
     _ = _saddle(
         input_=input_,
         output=output,
@@ -129,6 +144,7 @@ def saddle(
         num_cycles_anneal=num_cycles_anneal,
         random_seed=random_seed,
         background_fasta=background_fasta,
+        log_file=log,
     )
     return 0
 
@@ -149,6 +165,7 @@ def sgad(
     decay_exponent: float,
     temperature: float,
     background_fasta: Path | None = None,
+    log: Path | None = None,
 ) -> int:
     """Run SGAD-backed SA to choose a low-dimer primer set.
 
@@ -166,10 +183,15 @@ def sgad(
         decay_exponent: SGAD score-scaling decay exponent.
         temperature: SGAD score-scaling temperature (> 0).
         background_fasta: Optional FASTA file with additional primers to include in the pool.
+        log: Path to a per-run log file. Defaults to
+            ``<output-dir>/sgad.log``. First line is the folitools
+            version, followed by the resolved inputs and key parameters.
 
     Returns:
         Process exit code.
     """
+    if log is None:
+        log = default_command_log_path(output, "sgad")
     _ = _sgad(
         input_=input_,
         output=output,
@@ -184,6 +206,7 @@ def sgad(
         decay_exponent=decay_exponent,
         temperature=temperature,
         background_fasta=background_fasta,
+        log_file=log,
     )
     return 0
 
@@ -196,6 +219,7 @@ def product(
     output_fasta: Path,
     species: Literal["mouse", "human"] | None = None,
     txome_fasta: Path | None = None,
+    log: Path | None = None,
 ) -> int:
     """Extract amplicon regions to FASTA from selected primer set.
 
@@ -205,16 +229,23 @@ def product(
         output_fasta: Output FASTA path for extracted regions.
         species: If provided (and `txome_fasta` not set), use packaged reference for species.
         txome_fasta: Optional explicit FASTA path (overrides `species`).
+        log: Path to a per-run log file. Defaults to
+            ``<output-fasta-dir>/product.log``. First line is the
+            folitools version, followed by the resolved inputs and
+            success/error counts.
 
     Returns:
         Process exit code.
     """
+    if log is None:
+        log = default_command_log_path(output_fasta, "product")
     _ = _product(
         selected_tsv=input_,
         primer_info_tsv=primer_info,
         output_fasta=output_fasta,
         species=species,
         reference=txome_fasta,
+        log_file=log,
     )
     return 0
 
@@ -347,16 +378,17 @@ def workflow(
     amin, amax = amplicon_size_range
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) subset
+    # 1) subset (call the CLI wrapper so the default per-command log
+    # path applies — yields output_dir/subset.log).
     primer_info = output_dir / "primer_info.tsv"
-    _ = _subset(
-        gene_table_file=input_,
+    _ = subset(
+        input_=input_,
         species=species,
         amplicon_size_range=amplicon_size_range,
         output_primer_info=primer_info,
     )
 
-    # 2) saddle
+    # 2) saddle (CLI wrapper → output_dir/saddle.log)
     selected_tsv = output_dir / "primer_sequence_selected.tsv"
     loss_tsv = output_dir / "primer_sequence_selected_loss.txt"
     _ = saddle(
@@ -368,14 +400,14 @@ def workflow(
         background_fasta=background_fasta,
     )
 
-    # 3) product
+    # 3) product (CLI wrapper → output_dir/product.log)
     region_fa = output_dir / "amplicons.fasta"
-    _ = _product(
-        selected_tsv=selected_tsv,
-        primer_info_tsv=primer_info,
+    _ = product(
+        input_=selected_tsv,
+        primer_info=primer_info,
         output_fasta=region_fa,
         species=species,
-        reference=txome_fasta,
+        txome_fasta=txome_fasta,
     )
 
     # 4) summary (Excel output)

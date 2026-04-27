@@ -25,6 +25,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+from ._versioning import command_log
 from .utils import resolve_reference_path
 
 
@@ -128,6 +129,7 @@ def product(
     output_fasta: Path,
     species: Literal["mouse", "human"] | None = None,
     reference: Path | None = None,
+    log_file: Path | str | None = None,
 ) -> list[SeqRecord]:
     """Extract and save selected regions to a FASTA file.
 
@@ -136,83 +138,96 @@ def product(
         primer_info_tsv: Primer metadata TSV from the subset stage. Output by foli-primer subset.
         output_fasta: Output FASTA path to write regions.
         reference_fasta: Transcript FASTA (plain or gzipped).
+        log_file: Optional path to a per-run log file. The first line is
+            the folitools version followed by the resolved inputs and
+            success/error counts.
 
     Returns:
         List of SeqRecord objects containing the extracted amplicon sequences.
     """
-    selected_df = _coerce_selected_columns(pd.read_csv(selected_tsv, sep="\t"))
+    with command_log(__name__, log_file) as logger:
+        logger.info(f"selected_tsv: {Path(selected_tsv).resolve()}")
+        logger.info(f"primer_info_tsv: {Path(primer_info_tsv).resolve()}")
+        logger.info(f"output_fasta: {Path(output_fasta).resolve()}")
+        if species is not None:
+            logger.info(f"species: {species}")
+        if reference is not None:
+            logger.info(f"reference fasta: {Path(reference).resolve()}")
 
-    primer_df = load_primer_info(primer_info_tsv)
+        selected_df = _coerce_selected_columns(pd.read_csv(selected_tsv, sep="\t"))
 
-    if species is not None:
-        ref_path = resolve_reference_path(None, species)
-    elif reference is not None:
-        ref_path = resolve_reference_path(reference, None)
-    else:
-        raise ValueError("Either species or reference must be provided.")
-    transcript_pool = load_reference_transcripts(ref_path)
+        primer_df = load_primer_info(primer_info_tsv)
 
-    success = 0
-    errors = 0
-    records: list[SeqRecord] = []
+        if species is not None:
+            ref_path = resolve_reference_path(None, species)
+        elif reference is not None:
+            ref_path = resolve_reference_path(reference, None)
+        else:
+            raise ValueError("Either species or reference must be provided.")
+        transcript_pool = load_reference_transcripts(ref_path)
 
-    for _, row in selected_df.iterrows():
-        tx_id = str(row["transcript_id"])
-        primer_idx = row["primer_index"]
-        l_seq = row["l_seq"]
-        r_seq = row["r_seq"]
+        success = 0
+        errors = 0
+        records: list[SeqRecord] = []
 
-        try:
-            info = primer_df.loc[primer_idx]
-        except KeyError:
-            print(
-                f"Error [{tx_id}]: missing primer_index in primer info -> {primer_idx}"
+        for _, row in selected_df.iterrows():
+            tx_id = str(row["transcript_id"])
+            primer_idx = row["primer_index"]
+            l_seq = row["l_seq"]
+            r_seq = row["r_seq"]
+
+            try:
+                info = primer_df.loc[primer_idx]
+            except KeyError:
+                print(
+                    f"Error [{tx_id}]: missing primer_index in primer info -> {primer_idx}"
+                )
+                errors += 1
+                continue
+
+            cand_l_seq = info["l_seq"]
+            cand_r_seq = info["r_seq"]
+            cand_l_start = int(info["l_start"])  # 1-based
+            cand_r_start = int(info["r_start"])  # 1-based
+            amplicon_size = int(info["amplicon_size"])
+
+            if not (cand_l_seq == l_seq and cand_r_seq == r_seq):
+                print(f"Error [{tx_id}]: primer sequence mismatch")
+                errors += 1
+                continue
+
+            try:
+                seq_full = transcript_pool[tx_id]
+            except KeyError:
+                print(f"Error [{tx_id}]: transcript not found in reference FASTA")
+                errors += 1
+                continue
+
+            # Convert to 0-based inclusive slice [L_start-1 : R_start)
+            region = seq_full[(cand_l_start - 1) : cand_r_start]
+            if len(region) != amplicon_size:
+                print(
+                    f"Error [{tx_id}]: length mismatch (expected {amplicon_size}, got {len(region)})"
+                )
+                errors += 1
+                continue
+
+            rec = SeqRecord(
+                Seq(region),
+                id=str(primer_idx),
+                description=f"gene:{info['gene_symbol']} transcript:{tx_id}",
             )
-            errors += 1
-            continue
+            records.append(rec)
+            success += 1
+            print(f"Success [{tx_id}]: {len(region)} bp")
 
-        cand_l_seq = info["l_seq"]
-        cand_r_seq = info["r_seq"]
-        cand_l_start = int(info["l_start"])  # 1-based
-        cand_r_start = int(info["r_start"])  # 1-based
-        amplicon_size = int(info["amplicon_size"])
+        if records:
+            output_fasta.parent.mkdir(parents=True, exist_ok=True)
+            SeqIO.write(records, output_fasta, "fasta")
 
-        if not (cand_l_seq == l_seq and cand_r_seq == r_seq):
-            print(f"Error [{tx_id}]: primer sequence mismatch")
-            errors += 1
-            continue
+        print(f"\nSummary: {success} successful extractions, {errors} errors")
+        print(f"Output written to: {output_fasta}")
+        logger.info(f"successful extractions: {success}; errors: {errors}")
 
-        try:
-            seq_full = transcript_pool[tx_id]
-        except KeyError:
-            print(f"Error [{tx_id}]: transcript not found in reference FASTA")
-            errors += 1
-            continue
-
-        # Convert to 0-based inclusive slice [L_start-1 : R_start)
-        region = seq_full[(cand_l_start - 1) : cand_r_start]
-        if len(region) != amplicon_size:
-            print(
-                f"Error [{tx_id}]: length mismatch (expected {amplicon_size}, got {len(region)})"
-            )
-            errors += 1
-            continue
-
-        rec = SeqRecord(
-            Seq(region),
-            id=str(primer_idx),
-            description=f"gene:{info['gene_symbol']} transcript:{tx_id}",
-        )
-        records.append(rec)
-        success += 1
-        print(f"Success [{tx_id}]: {len(region)} bp")
-
-    if records:
-        output_fasta.parent.mkdir(parents=True, exist_ok=True)
-        SeqIO.write(records, output_fasta, "fasta")
-
-    print(f"\nSummary: {success} successful extractions, {errors} errors")
-    print(f"Output written to: {output_fasta}")
-    
-    # Return the most important object: the list of SeqRecord objects
-    return records
+        # Return the most important object: the list of SeqRecord objects
+        return records

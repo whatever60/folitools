@@ -65,6 +65,7 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 
+from ._versioning import command_log
 from .data_dir_resolve import _data_dir_for_species
 
 
@@ -228,6 +229,7 @@ def subset(
     species: str,
     amplicon_size_range: tuple[int, int],
     output_primer_info: Path,
+    log_file: Path | str | None = None,
 ) -> pd.DataFrame:
     """Run the subset operation end-to-end.
 
@@ -238,6 +240,9 @@ def subset(
             optionally ``group``,
             optionally ``primer_fwd`` and ``primer_rev``.
         output_primer_info: Path to write primer info TSV (must end with .tsv/.txt/.tsv.gz/.txt.gz).
+        log_file: Optional path to a per-run log file. The first line is
+            the folitools version (for reproducibility audits) followed
+            by the resolved inputs and counts.
 
     Returns:
         DataFrame containing the filtered primer info data.
@@ -246,70 +251,77 @@ def subset(
         FileNotFoundError: If required packaged Parquet files are missing.
         ValueError: On invalid inputs or explicit primer mismatches.
     """
-    # amin, amax = _parse_amplicon_size_range(amplicon_size_range)
-    amin, amax = amplicon_size_range
+    with command_log(__name__, log_file) as logger:
+        # amin, amax = _parse_amplicon_size_range(amplicon_size_range)
+        amin, amax = amplicon_size_range
+        logger.info(f"species: {species}")
+        logger.info(f"amplicon size range: {amin}-{amax}")
+        logger.info(f"gene table: {Path(gene_table_file).resolve()}")
+        logger.info(f"output primer info: {Path(output_primer_info).resolve()}")
 
-    # Validate output file extensions
-    _validate_output_file_extensions(output_primer_info)
+        # Validate output file extensions
+        _validate_output_file_extensions(output_primer_info)
 
-    # Resolve packaged inputs
-    suffix = f"{amin}_{amax}"
-    data_dir = _data_dir_for_species(species)
-    p_info = data_dir / f"01.primer3_pass.{suffix}.primer_info.parquet"
-    p_seq = data_dir / f"02.SADDLE_input.{suffix}.primer_0.parquet"
-    p_tx = data_dir / f"02.SADDLE_input.{suffix}.transcript_metadata.parquet"
-    for p in (p_info, p_seq, p_tx):
-        if not p.exists():
-            raise FileNotFoundError(f"Packaged input not found: {p}")
+        # Resolve packaged inputs
+        suffix = f"{amin}_{amax}"
+        data_dir = _data_dir_for_species(species)
+        p_info = data_dir / f"01.primer3_pass.{suffix}.primer_info.parquet"
+        p_seq = data_dir / f"02.SADDLE_input.{suffix}.primer_0.parquet"
+        p_tx = data_dir / f"02.SADDLE_input.{suffix}.transcript_metadata.parquet"
+        for p in (p_info, p_seq, p_tx):
+            if not p.exists():
+                raise FileNotFoundError(f"Packaged input not found: {p}")
 
-    # Ensure output directories exist
-    output_primer_info.parent.mkdir(parents=True, exist_ok=True)
+        # Ensure output directories exist
+        output_primer_info.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load inputs
-    transcript_df = pl.read_parquet(p_tx).to_pandas()
-    primer_seq_df = pl.read_parquet(p_seq).to_pandas()
-    primer_info_df = pl.read_parquet(p_info).to_pandas()
+        # Load inputs
+        transcript_df = pl.read_parquet(p_tx).to_pandas()
+        primer_seq_df = pl.read_parquet(p_seq).to_pandas()
+        primer_info_df = pl.read_parquet(p_info).to_pandas()
 
-    # Ensure chrN is string-like, if present
-    if "chrN" in primer_info_df.columns:
-        primer_info_df["chrN"] = primer_info_df["chrN"].astype("string")
+        # Ensure chrN is string-like, if present
+        if "chrN" in primer_info_df.columns:
+            primer_info_df["chrN"] = primer_info_df["chrN"].astype("string")
 
-    # Load gene table
-    gene_meta_df = read_gene_metadata(gene_table_file)
-    if not gene_meta_df["gene"].is_unique:
-        print("Warning: Gene table contains non-unique gene symbols.")
-    target_genes = set(gene_meta_df["gene"])
-    print(f"Loaded {len(target_genes)} target gene symbols")
+        # Load gene table
+        gene_meta_df = read_gene_metadata(gene_table_file)
+        if not gene_meta_df["gene"].is_unique:
+            print("Warning: Gene table contains non-unique gene symbols.")
+        target_genes = set(gene_meta_df["gene"])
+        print(f"Loaded {len(target_genes)} target gene symbols")
+        logger.info(f"target genes: {len(target_genes)}")
 
-    # Stage-wise filtering
-    tx_f, seq_f, info_f = _load_and_filter_data(
-        transcript_df=transcript_df,
-        primer_seq_df=primer_seq_df,
-        primer_info_df=primer_info_df,
-        target_genes=target_genes,
-    )
-
-    # Optional explicit pairs
-    genes_with_any = gene_meta_df[
-        gene_meta_df["gene"].isin(info_f["geneSymbol"].unique())
-    ]
-    if {"primer_fwd", "primer_rev"}.intersection(genes_with_any.columns):
-        # Only restrict if at least one explicit value is present in *any* row
-        any_explicit = (
-            genes_with_any[["primer_fwd", "primer_rev"]].notna().any(axis=None)
+        # Stage-wise filtering
+        tx_f, seq_f, info_f = _load_and_filter_data(
+            transcript_df=transcript_df,
+            primer_seq_df=primer_seq_df,
+            primer_info_df=primer_info_df,
+            target_genes=target_genes,
         )
-        if any_explicit:
-            info_f, seq_f = _post_filter_by_explicit_primers(
-                info_f, seq_f, genes_with_any
+
+        # Optional explicit pairs
+        genes_with_any = gene_meta_df[
+            gene_meta_df["gene"].isin(info_f["geneSymbol"].unique())
+        ]
+        if {"primer_fwd", "primer_rev"}.intersection(genes_with_any.columns):
+            # Only restrict if at least one explicit value is present in *any* row
+            any_explicit = (
+                genes_with_any[["primer_fwd", "primer_rev"]].notna().any(axis=None)
             )
+            if any_explicit:
+                info_f, seq_f = _post_filter_by_explicit_primers(
+                    info_f, seq_f, genes_with_any
+                )
 
-    # Save outputs
-    info_f.to_csv(output_primer_info, sep="\t", index=False)
-    # tx_f.to_csv(out_tx, sep="\t", index=False)
+        # Save outputs
+        info_f.to_csv(output_primer_info, sep="\t", index=False)
+        # tx_f.to_csv(out_tx, sep="\t", index=False)
 
-    print(f"Wrote: {output_primer_info}")
-    # print(f"Wrote: {out_tx}")
-    print("Subset complete.")
-    
-    # Return the most important object: the primer_info_df
-    return info_f
+        print(f"Wrote: {output_primer_info}")
+        # print(f"Wrote: {out_tx}")
+        print("Subset complete.")
+        logger.info(f"primer entries written: {len(info_f)}")
+
+        # Return the most important object: the primer_info_df
+        return info_f

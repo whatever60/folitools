@@ -106,6 +106,7 @@ Key Data Structures:
 """
 
 from collections import defaultdict
+import logging
 import math
 import random
 from pathlib import Path
@@ -114,6 +115,7 @@ from functools import lru_cache
 import pandas as pd
 from Bio import SeqIO
 
+from ._versioning import command_log
 from .saddle_utils import choice_except
 
 
@@ -430,6 +432,7 @@ def saddle(
     tolerance_factor: float = 1e6,
     reanneal_fraction: float = 0.5,
     background_fasta: Path | None = None,
+    log_file: Path | str | None = None,
 ) -> pd.DataFrame:
     """Run simulated annealing to choose a low-dimer primer set.
 
@@ -446,10 +449,54 @@ def saddle(
         reanneal_fraction: Fraction of cycles for greedy re-anneal (default: 0.5).
         background_fasta: Optional FASTA file with additional primer sequences to include
                          in interaction calculations as fixed background primers.
+        log_file: Optional path to a per-run log file. The first line is
+            the folitools version followed by the resolved inputs and
+            key parameters.
 
     Returns:
         DataFrame with selected primer pairs.
     """
+    with command_log(__name__, log_file) as logger:
+        return _saddle_inner(
+            input_=input_,
+            output=output,
+            output_loss=output_loss,
+            num_cycles_anneal=num_cycles_anneal,
+            random_seed=random_seed,
+            overlap_min=overlap_min,
+            overlap_max=overlap_max,
+            p3_dist_max=p3_dist_max,
+            tolerance_factor=tolerance_factor,
+            reanneal_fraction=reanneal_fraction,
+            background_fasta=background_fasta,
+            logger=logger,
+        )
+
+
+def _saddle_inner(
+    *,
+    input_: Path,
+    output: Path,
+    output_loss: Path,
+    num_cycles_anneal: int,
+    random_seed: int,
+    overlap_min: int,
+    overlap_max: int,
+    p3_dist_max: int,
+    tolerance_factor: float,
+    reanneal_fraction: float,
+    background_fasta: Path | None,
+    logger: logging.Logger,
+) -> pd.DataFrame:
+    logger.info(f"input: {Path(input_).resolve()}")
+    logger.info(f"output: {Path(output).resolve()}")
+    logger.info(f"output_loss: {Path(output_loss).resolve()}")
+    logger.info(
+        f"num_cycles_anneal={num_cycles_anneal} random_seed={random_seed}"
+    )
+    if background_fasta is not None:
+        logger.info(f"background fasta: {Path(background_fasta).resolve()}")
+
     random.seed(random_seed)
 
     num_cycles_after = int(reanneal_fraction * num_cycles_anneal)
@@ -580,6 +627,9 @@ def saddle(
     print("Results saved:")
     print(f"  - Final primers: {output} ({len(results_df)} records)")
     print(f"  - SADDLE loss: {output_loss} ({len(loss_df)} values)")
+    logger.info(f"selected primer pairs: {len(results_df)}")
+    if list_saddle_loss:
+        logger.info(f"final SADDLE loss: {list_saddle_loss[-1]:.6f}")
 
     # Return the most important object: the selected primers DataFrame
     return results_df

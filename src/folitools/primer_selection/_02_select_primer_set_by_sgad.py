@@ -9,6 +9,7 @@ Scoring convention is symmetric and unordered at the primer-instance level:
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 from pathlib import Path
@@ -23,6 +24,7 @@ from ._02_select_primer_set_by_saddle_loss import (
     load_primer_data,
     read_fasta,
 )
+from ._versioning import command_log
 from .saddle_utils import choice_except
 
 
@@ -161,6 +163,7 @@ def sgad(
     reanneal_fraction: float = 0.5,
     skip_initial_pairwise_loss: bool = True,
     background_fasta: Path | None = None,
+    log_file: Path | str | None = None,
 ) -> pd.DataFrame:
     """Run SGAD-based simulated annealing to select one design per gene.
 
@@ -168,7 +171,64 @@ def sgad(
 
     If skip_initial_pairwise_loss is True, the initial score is set to zero and
     optimization proceeds by delta updates only.
+
+    Args:
+        log_file: Optional path to a per-run log file. The first line is
+            the folitools version followed by the resolved inputs and
+            key parameters.
     """
+    log_ctx = command_log(__name__, log_file)
+    with log_ctx as logger:
+        logger.info(f"input: {Path(input_).resolve()}")
+        logger.info(f"output: {Path(output).resolve()}")
+        logger.info(f"output_loss: {Path(output_loss).resolve()}")
+        logger.info(
+            f"num_cycles_anneal={num_cycles_anneal} random_seed={random_seed}"
+        )
+        if background_fasta is not None:
+            logger.info(f"background fasta: {Path(background_fasta).resolve()}")
+
+        return _sgad_inner(
+            input_=input_,
+            output=output,
+            output_loss=output_loss,
+            num_cycles_anneal=num_cycles_anneal,
+            random_seed=random_seed,
+            at_match=at_match,
+            gc_match=gc_match,
+            mismatch=mismatch,
+            gap_open=gap_open,
+            gap_extend=gap_extend,
+            decay_exponent=decay_exponent,
+            temperature=temperature,
+            tolerance_factor=tolerance_factor,
+            reanneal_fraction=reanneal_fraction,
+            skip_initial_pairwise_loss=skip_initial_pairwise_loss,
+            background_fasta=background_fasta,
+            logger=logger,
+        )
+
+
+def _sgad_inner(
+    *,
+    input_: Path,
+    output: Path,
+    output_loss: Path,
+    num_cycles_anneal: int,
+    random_seed: int,
+    at_match: float,
+    gc_match: float,
+    mismatch: float,
+    gap_open: float,
+    gap_extend: float,
+    decay_exponent: float,
+    temperature: float,
+    tolerance_factor: float,
+    reanneal_fraction: float,
+    skip_initial_pairwise_loss: bool,
+    background_fasta: Path | None,
+    logger: logging.Logger,
+) -> pd.DataFrame:
     random.seed(random_seed)
     num_cycles_after = int(reanneal_fraction * num_cycles_anneal)
 
@@ -280,5 +340,8 @@ def sgad(
     print("Results saved:")
     print(f"  - Final primers: {output} ({len(results_df)} records)")
     print(f"  - SGAD loss: {output_loss} ({len(loss_df)} values)")
+    logger.info(f"selected primer pairs: {len(results_df)}")
+    if list_sgad_loss:
+        logger.info(f"final SGAD loss: {list_sgad_loss[-1]:.6f}")
 
     return results_df

@@ -52,6 +52,28 @@ Starting with version 0.3.2, releases are tracked here.
   QNAME intersection of `assigned_depth` and `good_umi_depth` is
   expected to equal `properly_mapped_depth` up to chimeric/unpaired
   alignments that umi_tools sends to BAM only.
+- Every pipeline step now stamps its log with the folitools version that
+  produced it, so a single `grep folitools_version` (JSON) or
+  `grep '^# folitools'` (text) tells you which run wrote any given log.
+  None of the markers are hardcoded — Python pulls from `__version__`,
+  Rust pulls from `env!("CARGO_PKG_VERSION")` (kept in sync via the
+  release commit). Per step:
+  - `foli qc`: adds a `"folitools_version"` key to each
+    `<sample>.fastp.json`.
+  - `foli assign-probes`: re-enables cutadapt's `--json` report at
+    `<sample>.cutadapt.json` and adds a `"folitools_version"` key.
+  - `foli map`: `foli_add_tags` (Rust binary and Python reference) now
+    writes a trailing `# folitools <version>` line to its `--log` file
+    after the SUMMARY line.
+  - `foli count`: appends `# folitools <version>` to each
+    `<sample>.group.log` after `umi_tools group` finishes.
+  - `foli get-read-stats`: stamps `folitools_version` into each
+    parquet file's schema key-value metadata (no sidecar log).
+  - `foli get-count-mtx` and `foli summary` already carry the version
+    in the index label of their output tables.
+  - `<dir>.stats` (seqkit `--tabular`) is intentionally **not**
+    decorated — it's a strict TSV consumed by `summary_stats` and any
+    extra line breaks parsing.
 
 ### Changed
 

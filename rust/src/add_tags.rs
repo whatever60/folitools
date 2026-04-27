@@ -338,6 +338,11 @@ pub fn run(args: Args) -> Result<()> {
             counted_assigned_count
         )
         .context("write SUMMARY line to log")?;
+        // Tag the log with the folitools version that produced it. The
+        // crate version is kept in sync with pyproject.toml's project
+        // version, so env!() picks up release bumps automatically.
+        writeln!(fh, "# folitools {}", env!("CARGO_PKG_VERSION"))
+            .context("write folitools version line to log")?;
     }
 
     Ok(())

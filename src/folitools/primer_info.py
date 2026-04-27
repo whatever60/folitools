@@ -9,6 +9,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from . import __version__
 from .utils import expand_path_to_list
 
 
@@ -106,10 +107,23 @@ def process_sample(
         "umi3": pl.Utf8,
     }
 
+    # `foli get-read-stats` writes parquet directly with no sidecar log,
+    # so the folitools version is stamped into the parquet schema's
+    # key-value metadata. Convert to an arrow schema first so we can
+    # attach the metadata before handing it to ParquetWriter.
+    arrow_schema = (
+        pl.DataFrame({k: pl.Series(k, [], dtype=v) for k, v in schema.items()})
+        .to_arrow()
+        .schema
+    )
+    existing_meta = dict(arrow_schema.metadata or {})
+    existing_meta[b"folitools_version"] = __version__.encode("utf-8")
+    arrow_schema = arrow_schema.with_metadata(existing_meta)
+
     # pyarrow compression default is snappy, but polars default is zstd
     with (
         IncrementalParquetWriter(
-            output_path, pl.Schema(schema), batch_size=batch_size, compression="zstd"
+            output_path, arrow_schema, batch_size=batch_size, compression="zstd"
         ) as writer,
         gzip.open(read1_path, "rt") as r1_handle,
         gzip.open(read2_path, "rt") as r2_handle,

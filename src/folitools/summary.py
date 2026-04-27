@@ -35,6 +35,16 @@ units with the rest of the table — unlike featureCounts' ``*.summary``
 Each edge of the DAG must be non-increasing (parent ≥ child) on every
 present-value pair; an ``AssertionError`` is raised otherwise so pipeline
 regressions surface immediately. Edges with a NaN endpoint are skipped.
+
+For reproducibility audits: every log file this parser reads — and every
+log this pipeline produces more broadly — also carries the folitools
+version that wrote it. JSON logs (fastp, cutadapt) carry a top-level
+``folitools_version`` key; plain-text logs (foli_add_tags, umi_tools
+group) carry a trailing ``# folitools <version>`` line; parquet outputs
+(``foli get-read-stats``) carry it in schema key-value metadata; count
+matrices and the summary table carry it in the index label. The seqkit
+``<dir>.stats`` TSV is the lone exception (decorating it would break
+parsing) — pair it with the matching JSON for that step.
 """
 
 from pathlib import Path

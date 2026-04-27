@@ -100,6 +100,8 @@ for bam in "${bams[@]}"; do
         --stdin $bam \
         --log2stderr \
         2> "$COUNTS_DIR/${sample_name}.group.log"
+    # Tag umi_tools' log with the folitools version that produced it.
+    append_folitools_version "$COUNTS_DIR/${sample_name}.group.log"
         # | sambamba sort \
         #     --nthreads "$((THREADS-1))" \
         #     --memory-limit 16GB \

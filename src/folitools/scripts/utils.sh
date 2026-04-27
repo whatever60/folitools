@@ -1,5 +1,56 @@
 # File format validation and processing utilities
 
+# Read folitools.__version__ once and cache it so repeated calls in the same
+# script invocation don't pay the python-startup cost. Reads at first call,
+# not at sourcing time, so callers don't need python on PATH unless they
+# actually log a version line.
+_FOLITOOLS_VERSION_CACHE=""
+folitools_version() {
+    if [[ -z "$_FOLITOOLS_VERSION_CACHE" ]]; then
+        _FOLITOOLS_VERSION_CACHE=$(
+            python -c "from folitools import __version__; print(__version__)"
+        )
+    fi
+    printf '%s' "$_FOLITOOLS_VERSION_CACHE"
+}
+
+# Append `# folitools <version>` to the given plain-text log file. Used by
+# pipeline steps whose third-party log is line-oriented and tolerates extra
+# trailing lines (e.g. umi_tools group log).
+append_folitools_version() {
+    local log_file="$1"
+    if [[ -z "$log_file" ]]; then
+        echo "Error: append_folitools_version requires a log file path." >&2
+        return 1
+    fi
+    printf '# folitools %s\n' "$(folitools_version)" >> "$log_file"
+}
+
+# Merge a `folitools_version` key into a JSON log file in-place. Used for
+# step logs that are JSON (fastp.json, cutadapt.json) where literal text
+# append would break parsers. Re-serialises with 2-space indent; the file
+# stays valid JSON, downstream readers just see one extra top-level key.
+stamp_folitools_version_json() {
+    local json_file="$1"
+    if [[ -z "$json_file" ]]; then
+        echo "Error: stamp_folitools_version_json requires a JSON file path." >&2
+        return 1
+    fi
+    python - "$json_file" <<'PY'
+import json
+import sys
+
+from folitools import __version__
+
+path = sys.argv[1]
+with open(path) as fh:
+    data = json.load(fh)
+data["folitools_version"] = __version__
+with open(path, "w") as fh:
+    json.dump(data, fh, indent=2)
+PY
+}
+
 # Check if a file is a supported FASTQ format
 is_fastq_file() {
     local file="$1"
@@ -146,7 +197,11 @@ run_seqkit_stats() {
         printf '%s\0' "${fastq_files[@]}" | sort -zV
     )
     seqkit stats --all --tabular --threads "${THREADS:-1}" "${sorted_files[@]}" > "$stats_file"
-
+    # NOTE: This is a strict TSV consumed by summary.summary_stats; do not
+    # decorate it with comment lines or trailing version markers — that
+    # breaks pandas-side parsing. Step-level version tagging happens on
+    # each step's JSON / text log instead (see foli_01_fastp.sh,
+    # foli_02_cutadapt.sh, foli_04_count.sh).
 }
 
 

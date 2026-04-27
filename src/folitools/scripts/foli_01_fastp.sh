@@ -122,6 +122,11 @@ for fqR1 in "${fqr1s[@]}"; do
 
     run_fastqc "$trimmed_R1" "$trimmed_R2" "$FASTP_FASTQC_DIR" "$THREADS"
 
+    # Tag the per-sample fastp JSON with the folitools version that
+    # produced it. Step 1's log surface is fastp.json; this is where
+    # reproducibility audits look for the run's tool versions.
+    stamp_folitools_version_json "$FASTP_DIR/${sample_name}.fastp.json"
+
     # Remove input FASTQs to save space
     if [[ "$DELETE" == "True" ]]; then
         rm "$fqR1" "$fqR2"

@@ -71,12 +71,19 @@ for fqR1 in "${fqr1s[@]}"; do
         --rename '{id} {adapter_name} {match_sequence}' \
         --action none \
         --interleaved \
+        --json "$REST_DIR/${sample_name}.cutadapt.json" \
         -o - \
         "$fqR1" "$fqR2" \
         2> /dev/null \
         | python -m folitools.add_umi \
             --o1 "$REST_DIR/${sample_name}_1.fq.gz" \
             --o2 "$REST_DIR/${sample_name}_2.fq.gz"
+
+    # Tag cutadapt's per-sample JSON report with the folitools version
+    # that produced it. cutadapt --json (added in 3.5) emits a structured
+    # report with input/output counts and per-adapter stats; this is the
+    # canonical Step 2 log for reproducibility.
+    stamp_folitools_version_json "$REST_DIR/${sample_name}.cutadapt.json"
 
     # # Remove reads that are too short or have name containing "no_adapter" (these are 
     # # considered primer dimers)

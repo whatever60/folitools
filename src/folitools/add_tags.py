@@ -248,6 +248,12 @@ def main(
             return 1
     finally:
         if log_fh is not None:
+            # Tag the log with the folitools version that produced it.
+            # Mirrors the Rust foli_add_tags binary; both write the same
+            # marker so summary tooling sees a consistent format.
+            from . import __version__
+
+            log_fh.write(f"# folitools {__version__}\n")
             log_fh.close()
     return 0
 

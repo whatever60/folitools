@@ -8,6 +8,8 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib as mpl
 
+from .. import __version__
+
 
 def make_report(
     out_pdf: Path,
@@ -33,9 +35,15 @@ def make_report(
     out_pdf = Path(out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
+    # Stamp the folitools version into the PDF's standard /Producer
+    # metadata; visible in any PDF viewer's "Document Properties" pane.
+    pdf_metadata = {
+        "Title": "folitools primer recovery report",
+        "Producer": f"folitools {__version__}",
+    }
     with (
         mpl.rc_context({"pdf.fonttype": 42, "svg.fonttype": "none"}),
-        PdfPages(out_pdf) as pdf,
+        PdfPages(out_pdf, metadata=pdf_metadata) as pdf,
     ):
         # Page 1: amplicon length histogram
         fig1, ax1 = plt.subplots(figsize=(6, 4.5))

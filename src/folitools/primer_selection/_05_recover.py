@@ -13,6 +13,11 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 # Local imports
+from .. import __version__
+from ._versioning import (
+    write_versioned_csv,
+    write_versioned_excel,
+)
 from .recover_plot import make_report
 from .utils import get_prefixes, resolve_reference_path, LINKER1, LINKER2
 from .recover_utils import simplify_gene_list
@@ -823,6 +828,11 @@ def recover(
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
+    # Log the folitools version first so reproducibility audits land on
+    # it without scanning. Stays in sync with release bumps via
+    # __version__ rather than a hardcoded string.
+    logger.info(f"folitools version: {__version__}")
+
     order_excel = Path(order_excel).resolve()
     logger.info(f"Amplicon length range: {amplicon_length_range}")
     logger.info(f"Order Excel: {order_excel}")
@@ -858,7 +868,7 @@ def recover(
     _sanity_check_seqkit_patterns(locate_df)
 
     if output_locate_df:
-        locate_df.to_csv(output_locate_df, index=False)
+        write_versioned_csv(locate_df, output_locate_df)
         logger.info(f"Saved locate_df to {Path(output_locate_df).resolve()}")
 
     # Enrich locate dataframe
@@ -868,7 +878,7 @@ def recover(
     _sanity_check_sequence_lengths(locate_df_final)
 
     if output_locate_df_final:
-        locate_df_final.to_csv(output_locate_df_final, index=False)
+        write_versioned_csv(locate_df_final, output_locate_df_final)
         logger.info(f"Saved locate_df_final to {Path(output_locate_df_final).resolve()}")
 
     # Enumerate and filter amplicons
@@ -894,7 +904,7 @@ def recover(
     amplicon_all["pass"] = length_pass & type_pass
     
     if output_amplicon_all:
-        amplicon_all.to_csv(output_amplicon_all, index=False)
+        write_versioned_csv(amplicon_all, output_amplicon_all)
         logger.info(f"Saved amplicon_all to {Path(output_amplicon_all).resolve()}")
     
     # Create subset for sanity checks (only passing amplicons)
@@ -918,7 +928,7 @@ def recover(
     _sanity_check_primer_pair_relationships(grouped)
 
     if output_grouped:
-        grouped.to_csv(output_grouped, index=False)
+        write_versioned_csv(grouped, output_grouped)
         logger.info(f"Saved grouped to {Path(output_grouped).resolve()}")
 
     summary_df = _build_summary_df(grouped, fwd_prefix, rev_prefix, chosen_index=0)
@@ -927,7 +937,7 @@ def recover(
     if output_order_excel is not None:
         out_xlsx = Path(output_order_excel)
         out_xlsx.parent.mkdir(parents=True, exist_ok=True)
-        summary_df.to_excel(out_xlsx, index=False)
+        write_versioned_excel(summary_df, out_xlsx, index=False)
 
     # Create SeqRecord lists for i5/i7 short FASTAs
     i5_records = _create_fasta_records(
@@ -941,7 +951,12 @@ def recover(
         simplify_gene_name=simplify_gene_name,
     )
 
-    # Write i5/i7 short FASTAs if output paths are provided
+    # Write i5/i7 short FASTAs if output paths are provided. NOT stamped
+    # in-file: cutadapt's dnaio FASTA reader rejects `;`-prefixed comment
+    # lines and Biopython's `fasta` reader has deprecated `#`-prefixed
+    # ones, so any in-file marker risks breaking downstream readers.
+    # Reproducibility for these files is covered by the recover.log
+    # (sibling file) which is already version-stamped.
     if output_i5 is not None:
         SeqIO.write(i5_records, str(output_i5), "fasta")
         logger.info(f"Saved i5 short FASTA to {Path(output_i5).resolve()}")

@@ -23,6 +23,7 @@ from ._02_select_primer_set_by_saddle_loss import (
     load_primer_data,
     read_fasta,
 )
+from ._versioning import write_versioned_tsv
 from .saddle_utils import choice_except
 
 
@@ -259,7 +260,7 @@ def sgad(
     print("Finished SGAD optimization!")
 
     loss_df = pd.DataFrame({"sgad_loss": list_sgad_loss})
-    loss_df.to_csv(output_loss, sep="\t", index=False, header=False)
+    write_versioned_tsv(loss_df, output_loss, header=False)
 
     rows = []
     for i, gene in enumerate(genes):
@@ -275,7 +276,7 @@ def sgad(
         )
 
     results_df = pd.DataFrame(rows)
-    results_df.to_csv(output, sep="\t", index=False)
+    write_versioned_tsv(results_df, output)
 
     print("Results saved:")
     print(f"  - Final primers: {output} ({len(results_df)} records)")

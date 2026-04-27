@@ -65,7 +65,9 @@ def load_primer_info(primer_file: Path) -> pd.DataFrame:
         DataFrame indexed by amplicon_index with normalized columns:
         [gene_id, gene_symbol, transcript_id, l_seq, l_start, r_seq, r_start, amplicon_size]
     """
-    df = pd.read_csv(primer_file, sep="\t")
+    # comment='#' skips the leading `# folitools <version>` line written by
+    # the subset stage's `write_versioned_tsv`.
+    df = pd.read_csv(primer_file, sep="\t", comment="#")
     cols_needed = [
         "amplicon_index",
         "geneID",
@@ -140,7 +142,11 @@ def product(
     Returns:
         List of SeqRecord objects containing the extracted amplicon sequences.
     """
-    selected_df = _coerce_selected_columns(pd.read_csv(selected_tsv, sep="\t"))
+    # comment='#' skips the leading `# folitools <version>` line written by
+    # the saddle/sgad stage's `write_versioned_tsv`.
+    selected_df = _coerce_selected_columns(
+        pd.read_csv(selected_tsv, sep="\t", comment="#")
+    )
 
     primer_df = load_primer_info(primer_info_tsv)
 

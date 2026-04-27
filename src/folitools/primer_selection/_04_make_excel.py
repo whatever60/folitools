@@ -1,5 +1,6 @@
 import pandas as pd
 
+from ._versioning import write_versioned_excel
 from .utils import get_prefixes
 
 
@@ -66,8 +67,8 @@ def _generate_idt_order_file(
     # Create final output with just the two required columns
     idt_output = idt_df[["Pool name", "Sequence"]]
 
-    # Save to Excel
-    idt_output.to_excel(output_idt_order, index=False)
+    # Save to Excel; workbook description carries the folitools version.
+    write_versioned_excel(idt_output, output_idt_order, index=False)
 
     # Print summary
     pool_counts = idt_df["Pool name"].value_counts().sort_index()
@@ -101,9 +102,12 @@ def summary(
         pd.DataFrame: A DataFrame containing the primer ordering information with 
         all necessary columns for further processing or analysis.
     """
-    selection = pd.read_table(primer_selection)
-    primer_info_df = pd.read_table(primer_info)
-    df_gene = pd.read_table(input_)
+    # comment='#' skips any leading `# folitools <version>` line stamped
+    # by the saddle/sgad and subset stages. Harmless on the user-supplied
+    # gene table (which is unstamped).
+    selection = pd.read_table(primer_selection, comment="#")
+    primer_info_df = pd.read_table(primer_info, comment="#")
+    df_gene = pd.read_table(input_, comment="#")
     df_gene = df_gene.rename({"gene": "geneSymbol"}, axis=1)
 
     if "group" in df_gene.columns:
@@ -152,7 +156,7 @@ def summary(
     res_df["primer_sequence_to_order_forward"] = FWD_PREFIX + res_df["L_seq"]
     res_df["primer_sequence_to_order_reverse"] = REV_PREFIX + res_df["R_seq"]
     res_df = res_df.sort_values(by=["pool", "Group", "geneSymbol", "Chosen Index"])
-    res_df.to_excel(output, index=False)
+    write_versioned_excel(res_df, output, index=False)
     print(res_df["Group"].value_counts())
 
     # Generate IDT ordering file if requested

@@ -5,22 +5,32 @@ into a single DataFrame (rows = samples, columns = metrics). Any source left
 as ``None`` yields an all-NaN column.
 
 The metrics form a DAG, not a single chain: from the post-QC long-read pool
-two parallel funnels converge on the count matrix.
+two parallel funnels merge at ``counted_depth`` / ``counted_assigned_depth``.
 
 * Library-quality funnel: ``long_read_depth`` → ``not_na_adapter_depth``
   (primer pair recognized) → ``good_umi_depth`` (also a clean UMI; the
-  reads that carry a ``UC`` tag) → ``properly_mapped_depth``.
+  reads that carry a ``UC`` tag).
 * Mapping/annotation funnel: ``long_read_depth`` → ``mapped_depth``
   (both primary mates aligned) → ``assigned_depth`` (at least one mate
-  carries a real gene id in ``XT``, so the QNAME's ``XF`` does not start
-  with ``Unassigned``) → ``properly_mapped_depth``.
+  carries a real gene id in ``XT``).
 
-All four ``add_tags``-derived metrics (``not_na_adapter``, ``good_umi``,
-``mapped``, ``assigned``) are counted per-QNAME inside ``foli_add_tags``
-and emitted on its ``SUMMARY`` line, so they share units with the rest of
-the table — unlike featureCounts' ``*.summary`` ``Assigned`` row, which
-counts reads (R1+R2) under foli's ``-p`` (no ``--countReadPairs``)
-invocation and is therefore not used here.
+The two funnels then merge:
+
+* ``counted_depth`` = ``mapped`` ∩ ``good_umi``: the QNAMEs that umi_tools
+  emits to ``group.tsv.gz`` under foli's current options
+  (``--chimeric-pairs use``, ``--unmapped-reads discard``,
+  ``--unpaired-reads use``); chimeric pairs are kept as long as both ends
+  are mapped and the ``UC`` tag is present.
+* ``counted_assigned_depth`` = ``counted`` ∩ ``assigned``: also requires
+  the QNAME's ``XF`` not to start with ``Unassigned,``, mirroring the
+  filter inside ``folitools.get_matrix``. Equals the row sum of the
+  pre-dedup count matrix.
+
+All six ``add_tags``-derived metrics are counted per-QNAME inside
+``foli_add_tags`` and emitted on its ``SUMMARY`` line, so they share
+units with the rest of the table — unlike featureCounts' ``*.summary``
+``Assigned`` row, which counts reads (R1+R2) under foli's ``-p`` (no
+``--countReadPairs``) invocation and is therefore not used here.
 
 Each edge of the DAG must be non-increasing (parent ≥ child) on every
 present-value pair; an ``AssertionError`` is raised otherwise so pipeline
@@ -43,25 +53,32 @@ METRIC_COLUMNS = (
     "good_umi_depth",
     "mapped_depth",
     "assigned_depth",
-    "properly_mapped_depth",
+    "counted_depth",
+    "counted_assigned_depth",
     "n_umi",
     "n_genes",
 )
 
 # Edges of the DAG used by `_assert_dag_non_increasing`. Parent ≥ child must
 # hold whenever both endpoints are present. The structure encodes:
-#   raw → qc → long ─┬─→ not_na_adapter → good_umi ─┐
-#                    └─→ mapped         → assigned ─┴─→ properly_mapped → n_umi → n_genes
+#   raw → qc → long ─┬→ not_na_adapter → good_umi ─┐
+#                    │                              ↓
+#                    │                            counted → counted_assigned → n_umi → n_genes
+#                    │                              ↑              ↑
+#                    └→ mapped ─┬────────────────────┘              │
+#                               └→ assigned ─────────────────────────┘
 _DAG_EDGES: tuple[tuple[str, str], ...] = (
     ("raw_depth", "pass_qc_depth"),
     ("pass_qc_depth", "long_read_depth"),
     ("long_read_depth", "not_na_adapter_depth"),
     ("not_na_adapter_depth", "good_umi_depth"),
-    ("good_umi_depth", "properly_mapped_depth"),
     ("long_read_depth", "mapped_depth"),
     ("mapped_depth", "assigned_depth"),
-    ("assigned_depth", "properly_mapped_depth"),
-    ("properly_mapped_depth", "n_umi"),
+    ("good_umi_depth", "counted_depth"),
+    ("mapped_depth", "counted_depth"),
+    ("counted_depth", "counted_assigned_depth"),
+    ("assigned_depth", "counted_assigned_depth"),
+    ("counted_assigned_depth", "n_umi"),
     ("n_umi", "n_genes"),
 )
 
@@ -103,15 +120,23 @@ def _read_star_input_reads(paths: list[str]) -> pd.Series:
     return pd.Series(result, dtype="int64")
 
 
-_ADD_TAGS_FIELDS = ("not_na_adapter", "good_umi", "mapped", "assigned")
+_ADD_TAGS_FIELDS = (
+    "not_na_adapter",
+    "good_umi",
+    "mapped",
+    "assigned",
+    "counted",
+    "counted_assigned",
+)
 
 
 def _read_add_tags_summary(paths: list[str]) -> dict[str, pd.Series]:
     """Parse SUMMARY lines from ``foli_add_tags --log`` outputs.
 
-    Returns a dict keyed by metric name (``not_na_adapter``, ``good_umi``,
-    ``mapped``, ``assigned``). All four are per-QNAME counters incremented
-    inside ``foli_add_tags`` so they share units across the row.
+    Returns a dict keyed by metric name. Every value is a per-QNAME
+    counter incremented inside ``foli_add_tags`` so they share units
+    across the row. Older SUMMARY lines that predate ``counted`` /
+    ``counted_assigned`` simply omit those keys, yielding empty series.
     """
     out: dict[str, dict[str, int]] = {k: {} for k in _ADD_TAGS_FIELDS}
     for p in paths:
@@ -140,6 +165,44 @@ def _read_count_matrix(path: str) -> pd.DataFrame:
     return df
 
 
+def _sample_from_group_tsv(path: str) -> str:
+    """``<sample>.group.tsv.gz`` → ``<sample>``."""
+    name = Path(path).name
+    for suffix in (".group.tsv.gz", ".group.tsv", ".tsv.gz", ".tsv"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return Path(path).stem
+
+
+def _read_group_tsv_counts(paths: list[str]) -> tuple[pd.Series, pd.Series]:
+    """Count rows in each ``group.tsv.gz`` (umi_tools group output).
+
+    Returns ``(total, assigned)`` per sample where ``total`` is the
+    number of data rows and ``assigned`` is the number of rows whose
+    ``gene`` column does not start with ``Unassigned,`` (mirroring the
+    filter in :mod:`folitools.get_matrix`).
+    """
+    total: dict[str, int] = {}
+    assigned: dict[str, int] = {}
+    for p in paths:
+        sample = _sample_from_group_tsv(p)
+        # polars handles .gz transparently and is fast for row counting.
+        # Avoid loading the full table into memory by streaming.
+        import polars as pl
+
+        scan = pl.scan_csv(p, separator="\t")
+        total[sample] = int(scan.select(pl.len()).collect()["len"][0])
+        assigned[sample] = int(
+            scan.filter(~pl.col("gene").str.starts_with("Unassigned,"))
+            .select(pl.len())
+            .collect()["len"][0]
+        )
+    return (
+        pd.Series(total, dtype="int64"),
+        pd.Series(assigned, dtype="int64"),
+    )
+
+
 def _as_path_list(arg: str | list[str] | None, suffix: str | None) -> list[str]:
     if arg is None:
         return []
@@ -163,14 +226,64 @@ def _assert_dag_non_increasing(df: pd.DataFrame) -> None:
                 )
 
 
+def _assert_strict_identities(
+    df: pd.DataFrame,
+    group_total: pd.Series | None,
+    group_assigned: pd.Series | None,
+    matrix_raw_rowsum: pd.Series | None,
+) -> None:
+    """Sanity checks enforced when ``strict=True``.
+
+    Each check fires only when the corresponding source is provided AND
+    the add_tags column is present for the sample. The checks express:
+
+    * ``counted_depth`` (from add_tags) == row count in ``group.tsv.gz``
+    * ``counted_assigned_depth`` (from add_tags) == row count in
+      ``group.tsv.gz`` after the ``Unassigned,`` filter
+    * ``counted_assigned_depth`` (from add_tags) == row sum of the
+      pre-dedup count matrix
+    """
+
+    def _check(col: str, expected: pd.Series, label: str) -> None:
+        observed = df[col]
+        for sample in observed.index.intersection(expected.index):
+            obs = observed.loc[sample]
+            exp = expected.loc[sample]
+            if pd.isna(obs) or pd.isna(exp):
+                continue
+            if int(obs) != int(exp):
+                raise AssertionError(
+                    f"summary_stats strict check failed for sample "
+                    f"{sample!r}: {col}={int(obs)} from add_tags log "
+                    f"!= {int(exp)} from {label}"
+                )
+
+    if group_total is not None:
+        _check("counted_depth", group_total, "group.tsv.gz row count")
+    if group_assigned is not None:
+        _check(
+            "counted_assigned_depth",
+            group_assigned,
+            "group.tsv.gz rows with non-Unassigned gene",
+        )
+    if matrix_raw_rowsum is not None:
+        _check(
+            "counted_assigned_depth",
+            matrix_raw_rowsum,
+            "row sum of count_matrix_raw",
+        )
+
+
 def summary_stats(
     *,
     fastq_stats: str | None = None,
     fastp_stats: str | None = None,
     star_logs: str | list[str] | None = None,
     add_tags_logs: str | list[str] | None = None,
+    group_tsvs: str | list[str] | None = None,
     count_matrix_raw: str | None = None,
     count_matrix_dedup: str | None = None,
+    strict: bool = False,
 ) -> pd.DataFrame:
     """Aggregate per-sample pipeline-stage counts into one DataFrame.
 
@@ -184,29 +297,38 @@ def summary_stats(
             (``Number of input reads``).
         add_tags_logs: Glob/path/list of ``foli_add_tags`` log files written
             with ``--log``. Samples come from the ``cell_tag`` field in each
-            SUMMARY line. Drives four columns: ``not_na_adapter_depth``
-            (primer pair recognized), ``good_umi_depth`` (recognized + clean
-            UMI; equals R1 records carrying a ``UC`` tag), ``mapped_depth``
-            (both primary mates aligned), and ``assigned_depth`` (some mate
-            carries a real gene id in ``XT``).
+            SUMMARY line. Drives ``not_na_adapter_depth``, ``good_umi_depth``,
+            ``mapped_depth``, ``assigned_depth``, ``counted_depth``, and
+            ``counted_assigned_depth``.
+        group_tsvs: Glob/path/list of ``umi_tools group --group-out`` TSVs
+            (``<sample>.group.tsv.gz``). Used only when ``strict=True`` to
+            sanity-check ``counted_depth`` (row count) and
+            ``counted_assigned_depth`` (rows after the ``Unassigned,``
+            filter) against the values reported by ``foli_add_tags``.
         count_matrix_raw: Pre-UMI-dedup count matrix from
-            ``foli get-count-mtx --output-raw``. Row sums drive
-            ``properly_mapped_depth``.
+            ``foli get-count-mtx --output-raw``. When ``add_tags_logs`` is
+            absent its row sums populate ``counted_assigned_depth`` as a
+            backward-compatible fallback. When ``strict=True`` and both
+            sources are present, the row sum is asserted equal to
+            ``counted_assigned_depth`` from the add_tags log.
         count_matrix_dedup: UMI-dedup count matrix from
             ``foli get-count-mtx --output``. Row sums drive ``n_umi``; the
             per-row count of nonzero genes drives ``n_genes``.
+        strict: If True, in addition to the always-on DAG check, assert
+            that the ``counted`` / ``counted_assigned`` values reported by
+            ``foli_add_tags`` agree with the ``group.tsv.gz`` row counts
+            and the count-matrix row sums on every sample where both
+            sources are present. Default False.
 
     Returns:
         DataFrame indexed by sample with columns in :data:`METRIC_COLUMNS`
         order. Dtype is pandas ``Int64`` so unset metrics are preserved as
-        ``pd.NA``. The columns form a DAG (see :data:`_DAG_EDGES`); when
-        used as part of the foli pipeline, the QNAME-set intersection of
-        ``assigned_depth`` and ``good_umi_depth`` is expected to equal
-        ``properly_mapped_depth`` up to the small fraction of chimeric or
-        unpaired alignments that umi_tools emits to BAM only.
+        ``pd.NA``.
 
     Raises:
-        AssertionError: If any DAG edge has child > parent on present values.
+        AssertionError: If any DAG edge has child > parent on present
+            values, or — when ``strict=True`` — if any of the cross-source
+            identities described above is violated.
     """
     series_by_col: dict[str, pd.Series] = {}
 
@@ -220,15 +342,19 @@ def summary_stats(
         )
     if add_tags_logs is not None:
         parsed = _read_add_tags_summary(_as_path_list(add_tags_logs, suffix=None))
-        series_by_col["not_na_adapter_depth"] = parsed["not_na_adapter"]
-        series_by_col["good_umi_depth"] = parsed["good_umi"]
-        if not parsed["mapped"].empty:
-            series_by_col["mapped_depth"] = parsed["mapped"]
-        if not parsed["assigned"].empty:
-            series_by_col["assigned_depth"] = parsed["assigned"]
+        for key in _ADD_TAGS_FIELDS:
+            if not parsed[key].empty:
+                series_by_col[f"{key}_depth"] = parsed[key]
+
+    matrix_raw_rowsum: pd.Series | None = None
     if count_matrix_raw is not None:
         df_raw = _read_count_matrix(count_matrix_raw)
-        series_by_col["properly_mapped_depth"] = df_raw.sum(axis=1).astype("int64")
+        matrix_raw_rowsum = df_raw.sum(axis=1).astype("int64")
+        # Backward-compatible fallback: if add_tags didn't drive
+        # counted_assigned_depth, populate it from the matrix row sum.
+        if "counted_assigned_depth" not in series_by_col:
+            series_by_col["counted_assigned_depth"] = matrix_raw_rowsum
+
     if count_matrix_dedup is not None:
         df_dedup = _read_count_matrix(count_matrix_dedup)
         series_by_col["n_umi"] = df_dedup.sum(axis=1).astype("int64")
@@ -241,4 +367,15 @@ def summary_stats(
     df = df.astype("Int64")
 
     _assert_dag_non_increasing(df)
+
+    if strict:
+        group_total = group_assigned = None
+        if group_tsvs is not None:
+            group_total, group_assigned = _read_group_tsv_counts(
+                _as_path_list(group_tsvs, suffix=None)
+            )
+        _assert_strict_identities(
+            df, group_total, group_assigned, matrix_raw_rowsum
+        )
+
     return df

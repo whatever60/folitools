@@ -276,29 +276,53 @@ Writes a sample × metric table (TSV/CSV chosen by `--output` extension;
 | `not_na_adapter_depth` | QNAMEs with both primers recognized |
 | `good_umi_depth` | QNAMEs with both primers recognized **and** both UMIs well-formed (== R1 records carrying a `UC` tag) |
 | `mapped_depth` | QNAMEs with both primary mates aligned |
-| `assigned_depth` | QNAMEs whose `XF` does not start with `Unassigned` (some mate carried a real gene id in `XT`) |
-| `properly_mapped_depth` | Reads that produced a count (row sums of the raw count matrix) |
+| `assigned_depth` | QNAMEs whose `XF` does not start with `Unassigned,` (some mate carried a real gene id in `XT`) |
+| `counted_depth` | QNAMEs that land in `group.tsv.gz` (= `mapped` ∩ `good_umi`) |
+| `counted_assigned_depth` | Row sum of the pre-dedup count matrix (= `counted` ∩ `assigned`) |
 | `n_umi` | Unique UMIs |
 | `n_genes` | Distinct genes detected |
 
-Any flag left unset yields an all-`NA` column. The columns form a DAG —
-two parallel funnels merge at `properly_mapped_depth`:
+Any flag left unset yields an all-`NA` column. The columns form a DAG
+with two diamonds — the library-quality leg and the mapping leg first
+reconverge at `counted`, then `counted` and `assigned` reconverge at
+`counted_assigned`:
 
 ```
-raw → qc → long ─┬─→ not_na_adapter → good_umi ─┐
-                 └─→ mapped         → assigned ─┴─→ properly_mapped → n_umi → n_genes
+              ┌─→ not_na_adapter ─→ good_umi ─┐
+              │                                 ↓
+raw → qc → long                              counted ─→ counted_assigned ─→ n_umi ─→ n_genes
+              │                                 ↑                ↑
+              └─→ mapped ─┬─────────────────────┘                │
+                          └─→ assigned ──────────────────────────┘
 ```
+
+* **First diamond**, closing at `counted`: `long` branches into the
+  library-quality leg (`not_na_adapter → good_umi`) and the mapping
+  leg (`mapped`); they reconverge at `counted = mapped ∩ good_umi`,
+  the QNAMEs that umi_tools emits to `<sample>.group.tsv.gz`.
+* **Second diamond**, closing at `counted_assigned`: `counted` carries
+  forward while `mapped` keeps a side-branch into `assigned`; they
+  reconverge at `counted_assigned = counted ∩ assigned`, equal to the
+  pre-dedup count matrix's row sum and to the `group.tsv.gz` row count
+  after the `Unassigned,` filter in `folitools.get_matrix`.
 
 `foli summary` asserts each edge (parent ≥ child on present-value pairs)
-so pipeline regressions surface immediately. The `not_na_adapter`,
-`good_umi`, `mapped`, and `assigned` columns are all per-QNAME counters
-emitted by `foli_add_tags` on its `--log` SUMMARY line, so they share
-units with the rest of the table. (featureCounts' `*.summary` `Assigned`
-row counts reads, not pairs, under foli's `-p` invocation, so it is not
-used as the source.) The QNAME-set intersection of `assigned_depth` and
-`good_umi_depth` is expected to equal `properly_mapped_depth` up to the
-small fraction of chimeric or unpaired alignments that umi_tools emits
-to BAM only.
+so pipeline regressions surface immediately. All six add-tags-derived
+columns (`not_na_adapter`, `good_umi`, `mapped`, `assigned`, `counted`,
+`counted_assigned`) are per-QNAME counters emitted by `foli_add_tags`
+on its `--log` SUMMARY line, so they share units with the rest of the
+table. (featureCounts' `*.summary` `Assigned` row counts reads, not
+pairs, under foli's `-p` invocation, so it is not used as the source.)
+
+Each interior node maps 1:1 to something an external tool produces and
+can be cross-checked against — pass `--strict` to enforce these
+identities on every sample where both sources are present:
+
+* `counted_depth` (from add_tags) == row count of `--group-tsvs`
+* `counted_assigned_depth` (from add_tags) == rows in `--group-tsvs`
+  whose `gene` does not start with `Unassigned,`
+* `counted_assigned_depth` (from add_tags) == row sum of
+  `--count-matrix-raw`
 
 ## Primer Selection Functionality
 

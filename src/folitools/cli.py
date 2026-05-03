@@ -296,7 +296,19 @@ def summary(
             help=(
                 "Glob/path/list of foli_add_tags --log files (SUMMARY lines "
                 "keyed by cell_tag). Drives not_na_adapter / good_umi / "
-                "mapped / assigned columns."
+                "mapped / assigned / counted / counted_assigned columns."
+            ),
+        ),
+    ] = None,
+    group_tsvs: Annotated[
+        list[str] | None,
+        Parameter(
+            consume_multiple=True,
+            help=(
+                "Glob/path/list of umi_tools group output files "
+                "(<sample>.group.tsv.gz). Used only with --strict to "
+                "sanity-check counted_depth against the actual TSV row "
+                "counts."
             ),
         ),
     ] = None,
@@ -308,6 +320,19 @@ def summary(
         str | None,
         Parameter(help="UMI-dedup count matrix from foli get-count-mtx --output"),
     ] = None,
+    strict: Annotated[
+        bool,
+        Parameter(
+            "--strict",
+            help=(
+                "In addition to the always-on DAG check, assert that "
+                "counted_depth and counted_assigned_depth from the "
+                "add_tags log match the row counts in --group-tsvs and "
+                "the row sum of --count-matrix-raw on every sample where "
+                "both sources are present."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Aggregate per-sample read counts from each pipeline stage into one table.
 
@@ -320,8 +345,10 @@ def summary(
         fastp_stats=fastp_stats,
         star_logs=star_logs,
         add_tags_logs=add_tags_logs,
+        group_tsvs=group_tsvs,
         count_matrix_raw=count_matrix_raw,
         count_matrix_dedup=count_matrix_dedup,
+        strict=strict,
     )
     df.to_csv(
         output,

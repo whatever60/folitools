@@ -144,6 +144,15 @@ pub fn run(args: Args) -> Result<()> {
     let mut good_umi_count: u64 = 0;
     let mut mapped_count: u64 = 0;
     let mut assigned_count: u64 = 0;
+    let mut counted_count: u64 = 0;
+    let mut counted_assigned_count: u64 = 0;
+
+    // Per-QNAME flag set on any primary R1 that satisfies criteria_ok. Read by
+    // finalize_group to compute counted = mapped & good_umi (the QNAMEs that
+    // can land in group.tsv.gz) and counted_assigned = counted & assigned
+    // (the QNAMEs that survive the get_matrix Unassigned-row filter and
+    // contribute to the raw count matrix). Reset on each QNAME boundary.
+    let mut current_good_umi: bool = false;
 
     let mut record = Record::new();
 
@@ -166,10 +175,14 @@ pub fn run(args: Args) -> Result<()> {
                 log_fh.as_mut(),
                 &mut mapped_count,
                 &mut assigned_count,
+                &mut counted_count,
+                &mut counted_assigned_count,
+                current_good_umi,
             )?;
             xt_values.clear();
             current_qname.clear();
             current_primers.clear();
+            current_good_umi = false;
         }
 
         let mut parts = qname.splitn(4, |&b| b == b'_');
@@ -226,13 +239,18 @@ pub fn run(args: Args) -> Result<()> {
             }
             if adapter_ok && umi_ok {
                 good_umi_count += 1;
+                current_good_umi = true;
             }
         }
 
-        // Custom tags (CB/US/PR/UC/XN/XT default) are written to R1 only:
-        // umi_tools group/count in --paired mode only inspects R1, so mirroring
-        // them onto R2 was redundant work.
-        if is_read1 {
+        // Custom tags (CB/US/PR/UC/XN/XT default) go on R1 primary only:
+        // umi_tools group/count in --paired mode only reads R1, and within
+        // that, only the primary alignment carries XF (added in
+        // finalize_group), so non-primary R1s would be skipped at the
+        // missing-XF branch anyway. Tagging just the primary keeps a
+        // SAM-spec-compliant input (one primary per mate per QNAME) at
+        // exactly one tagged R1 per QNAME.
+        if is_read1 && is_primary {
             if let Some(cv) = args.cell_tag.as_deref() {
                 let _ = record.remove_aux(cell_tag_name_bytes);
                 record.push_aux(cell_tag_name_bytes, Aux::String(cv))?;
@@ -295,6 +313,9 @@ pub fn run(args: Args) -> Result<()> {
             log_fh.as_mut(),
             &mut mapped_count,
             &mut assigned_count,
+            &mut counted_count,
+            &mut counted_assigned_count,
+            current_good_umi,
         )?;
     }
 
@@ -306,8 +327,15 @@ pub fn run(args: Args) -> Result<()> {
         let cell_tag_field = args.cell_tag.as_deref().unwrap_or("-");
         writeln!(
             fh,
-            "SUMMARY cell_tag={} total_r1={} not_na_adapter={} good_umi={} mapped={} assigned={}",
-            cell_tag_field, total_r1_count, not_na_adapter_count, good_umi_count, mapped_count, assigned_count
+            "SUMMARY cell_tag={} total_r1={} not_na_adapter={} good_umi={} mapped={} assigned={} counted={} counted_assigned={}",
+            cell_tag_field,
+            total_r1_count,
+            not_na_adapter_count,
+            good_umi_count,
+            mapped_count,
+            assigned_count,
+            counted_count,
+            counted_assigned_count
         )
         .context("write SUMMARY line to log")?;
     }
@@ -332,6 +360,9 @@ fn finalize_group(
     log_fh: Option<&mut std::fs::File>,
     mapped_count: &mut u64,
     assigned_count: &mut u64,
+    counted_count: &mut u64,
+    counted_assigned_count: &mut u64,
+    good_umi_for_qname: bool,
 ) -> Result<()> {
     let mut r1_idxs: Vec<usize> = Vec::new();
     let mut r2_idxs: Vec<usize> = Vec::new();
@@ -431,11 +462,26 @@ fn finalize_group(
             r2_mapped = true;
         }
     }
-    if r1_mapped && r2_mapped {
+    let mapped_ok = r1_mapped && r2_mapped;
+    let assigned_ok = !gene_set.is_empty();
+    if mapped_ok {
         *mapped_count += 1;
     }
-    if !gene_set.is_empty() {
+    if assigned_ok {
         *assigned_count += 1;
+    }
+    // counted = mapped & good_umi: matches the QNAMEs umi_tools emits to
+    // group.tsv.gz under the current --chimeric-pairs use / --unmapped-reads
+    // discard / --unpaired-reads use settings (chimeric pairs are now kept
+    // in the bundle path so long as both ends are mapped and the UC tag is
+    // present). counted_assigned additionally requires gene_set non-empty,
+    // which mirrors the get_matrix `~gene.starts_with("Unassigned,")` filter
+    // and equals the row sum of the pre-dedup count matrix.
+    if mapped_ok && good_umi_for_qname {
+        *counted_count += 1;
+        if assigned_ok {
+            *counted_assigned_count += 1;
+        }
     }
     let mut xf_value: Vec<u8> = Vec::new();
     if gene_set.is_empty() {

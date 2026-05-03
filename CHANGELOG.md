@@ -8,6 +8,32 @@ Starting with version 0.3.2, releases are tracked here.
 
 ### Added
 
+- `summary_stats` / `foli summary`: `properly_mapped_depth` is renamed
+  to `counted_assigned_depth` and a new `counted_depth` column is added
+  in front of it. Both are per-QNAME counters emitted by
+  `foli_add_tags` on its SUMMARY line so they live in the same units
+  as the rest of the table:
+  - `counted` = `mapped` ∩ `good_umi` — the QNAMEs that umi_tools
+    emits to `group.tsv.gz` under the current
+    `--chimeric-pairs use` / `--unmapped-reads discard` /
+    `--unpaired-reads use` flags.
+  - `counted_assigned` = `counted` ∩ `assigned` — equals the row sum
+    of the pre-dedup count matrix after the `Unassigned,` filter in
+    `folitools.get_matrix`.
+  The DAG is now `raw → qc → long → {not_na → good_umi, mapped →
+  assigned} → counted → counted_assigned → n_umi → n_genes`, with
+  `mapped → counted` and `assigned → counted_assigned` as the cross
+  edges. `foli summary --strict` (new flag) additionally asserts
+  `counted_depth == #rows in --group-tsvs`,
+  `counted_assigned_depth == #rows in --group-tsvs after the
+  Unassigned, filter`, and
+  `counted_assigned_depth == row sum of --count-matrix-raw`. New
+  optional `--group-tsvs` arg accepts a glob/path/list of
+  `<sample>.group.tsv.gz` files and is consulted only when `--strict`
+  is set. `count_matrix_raw` is no longer the primary source of
+  `counted_assigned_depth`; it falls back to populating that column
+  only when the add_tags log is absent (preserving the previous
+  behavior for callers that only have the matrix).
 - `summary_stats` / `foli summary`: two new columns that capture the
   mapping/annotation funnel running parallel to the library-quality
   funnel — `mapped_depth` (QNAMEs with both primary mates aligned) and

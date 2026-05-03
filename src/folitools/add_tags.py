@@ -135,10 +135,13 @@ def add_tags_wo_fastq(
             is_read1 = (flag & 0x40) != 0
             is_not_primary = (flag & 0x900) != 0
 
-            # Custom tags (CB/US/PR/UC/XN/XT default) go on R1 only:
-            # umi_tools group/count in --paired mode only inspects R1, so
-            # mirroring these onto R2 is redundant work.
-            if is_read1:
+            # Custom tags (CB/US/PR/UC/XN/XT default) go on R1 primary only:
+            # umi_tools reads tags from R1 primary, and a SAM-compliant
+            # paired-end BAM has exactly one R1 primary per QNAME, so this
+            # is one tagged record per QNAME with no redundancy. R1
+            # secondaries/supplementaries get no tags and are dropped
+            # downstream by umi_tools' missing-XF branch.
+            if is_read1 and not is_not_primary:
                 if cell_tag_set:
                     read.set_tag(cell_tag_name, cell_tag, value_type="Z")
 
@@ -156,7 +159,8 @@ def add_tags_wo_fastq(
                 ):
                     read.set_tag(umi_tag_s_correct_name, umi1 + umi2, value_type="Z")
 
-                # XT fallback for R1. Trust featureCounts for R2.
+                # XT fallback for R1 primary. Trust featureCounts for R2 and
+                # for R1 non-primaries.
                 if read.has_tag("XT"):
                     xt_value = read.get_tag("XT")
                 else:
@@ -166,8 +170,8 @@ def add_tags_wo_fastq(
                     read.set_tag("XT", "Unassigned", value_type="Z")
                     xt_value = "Unassigned"
             else:
-                # R2: read XT (if present) for XF aggregation, but do not
-                # write tags. R2's XT comes straight from featureCounts.
+                # Read XT (if present) for XF aggregation but do not write
+                # tags. Covers R2 plus R1 secondaries/supplementaries.
                 xt_value = (
                     read.get_tag("XT") if read.has_tag("XT") else "Unassigned"
                 )

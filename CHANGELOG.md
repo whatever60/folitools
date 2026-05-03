@@ -148,6 +148,9 @@ Starting with version 0.3.2, releases are tracked here.
   `folitools.summary.summary_stats`. Aggregates per-sample read counts
   from every pipeline stage into a single sample × metric table and
   writes TSV/CSV chosen by the `--output` extension (`.gz` supported).
+  The folitools version is stamped into the index-column header cell
+  of the output (`index_label=f"folitools {__version__}"`), matching
+  the convention `foli get-count-mtx` has used since 0.3.1.
 
 ## [0.6.0] - 2026-04-23
 
@@ -164,7 +167,11 @@ Starting with version 0.3.2, releases are tracked here.
 - `foli get-count-mtx --output-raw`: writes a pre-UMI-dedup (read-count)
   matrix alongside or instead of `--output`. At least one of the two
   must be set; both can be written in one invocation and share the
-  same input scan.
+  same input scan. The new `--output-raw` file carries the same
+  `folitools <version>` stamp in its index-column header cell that
+  `--output` has carried since 0.3.1 (introduced in `291a1c3`,
+  predating this changelog's first tracked release; flagged here for
+  the record).
 - `foli_add_tags` now writes a single-line `SUMMARY` record to the
   `--log` file at program end, capturing per-run `total_r1`,
   `good_umi`, and `not_na_adapter` counts. Consumed by `summary_stats`

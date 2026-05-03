@@ -53,26 +53,31 @@ for bam in "${bams[@]}"; do
     # umi_tools behaviors:
     # umi_tools group can take BAM from stdin and output BAM to stdout.
     # umi_tools count can take BAM from stdin and output TSV to stdout, but it does not output BAM.
-    # --no-sort-output: umi_tools resort input BAM by read start position (alignment start - soft-clipping) 
-    # to as an intermediate step. By default it will sort again by alignment start for output, 
+    # --no-sort-output: umi_tools resort input BAM by read start position (alignment start - soft-clipping)
+    # to as an intermediate step. By default it will sort again by alignment start for output,
     # and this flag prevents the second sort.
-    # --unmapped-reads [discard (default)|use|output]
-    # --chimerric-pairs [discard|use (default)|output]
-    # --unpaired-reads [discard|use (default)|output]
-    # --log <file> will append to the file instead of overwriting it. So we use 
+    # --unmapped-reads discard: drop unmapped records before bundling. TSV-equivalent to
+    #   `output` since we don't pass --output-bam (the `output` mode only writes single_read
+    #   yields to BAM), and lets pysam skip the unmapped tail via fetch(until_eof=False).
+    # --chimeric-pairs use: keep cross-contig pairs and bundle them like normal. R1 and R2
+    #   are aggregated into XF by foli_add_tags, so a chimeric pair contributes a multi-gene
+    #   XF (e.g. "GeneA,GeneB,...") which becomes a "GeneA|GeneB" co-assignment column in
+    #   the count matrix. Intentional: amplicon libraries can pick up gene-fusion-style
+    #   junctions where R1's primer and R2's mapping land in different genes, and we want
+    #   that signal preserved rather than dropped.
+    # --unpaired-reads use: irrelevant for foli (data is always paired with flag 0x1 set);
+    #   set to `use` for symmetry with --chimeric-pairs.
+    # --log <file> will append to the file instead of overwriting it. So we use
     # --log2stderr with 2> <file> to redirect stderr to a clean file.
-    # What is the effect of --paired?
-    # What is the effect of --out-sam in umi_tools count if it does not output BAM at all?
     # umi_tools paired end behaviors:
-    #    1. It gets cell tags, gene tags and umi tags only from R1. It does not care if 
+    #    1. It gets cell tags, gene tags and umi tags only from R1. It does not care if
     #    R2 has them or not. Also, it won't verify if R1 and R2 have the same tags.
     #    2. Thus, if both R1 and R2 have UMI sequences, users are responsible for concatenating
     #    them into R1 UMI before running umi_tools.
     # umi_tools multimapping behaviors:
-    #    1. umi_tools only uses the primary alignment for UMI deduplication and counting.
-    #    But secondary/supplementary alignments are also output to the tsv or bam as is.
-    #    Therefore, it should be noted that non-primary alignments are not used by umi_tools,
-    #    and even they are reflected in the outputs, we do not consider them informative.
+    #    1. umi_tools has no explicit primary-only filter, but in foli's pipeline only R1
+    #    primary carries XF (foli_add_tags only stamps it there), so secondary/supplementary
+    #    R1s are dropped at umi_tools' "Read skipped, no tag" branch and never reach the TSV.
 
     # Run the `group` subcommand to get richer information.
     # Count matrix can be derived from {sample_name}.group.tsv.gz.
@@ -86,9 +91,9 @@ for bam in "${bams[@]}"; do
         --umi-tag UC \
         --extract-umi-method tag \
         --paired \
-        --unmapped-reads output \
-        --chimeric-pairs output \
-        --unpaired-reads output \
+        --unmapped-reads discard \
+        --chimeric-pairs use \
+        --unpaired-reads use \
         --no-sort-output \
         --skip-tags-regex "(?!)" \
         --group-out "$COUNTS_DIR/${sample_name}.group.tsv.gz" \

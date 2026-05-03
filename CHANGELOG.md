@@ -6,6 +6,68 @@ Starting with version 0.3.2, releases are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- `summary_stats` / `foli summary`: two new columns that capture the
+  mapping/annotation funnel running parallel to the library-quality
+  funnel — `mapped_depth` (QNAMEs with both primary mates aligned) and
+  `assigned_depth` (QNAMEs whose `XF` doesn't start with `Unassigned`).
+  Both are per-QNAME counters added to the `foli_add_tags --log`
+  SUMMARY line so they share units with `not_na_adapter` and
+  `good_umi` (featureCounts' `*.summary` `Assigned` row was rejected
+  as a source: under foli's `-p` invocation, without
+  `--countReadPairs`, it counts reads not pairs and is therefore ~2×
+  the right value).
+- The columns now form a DAG (`raw → qc → long → {not_na → good_umi,
+  mapped → assigned} → properly_mapped → n_umi → n_genes`) and the
+  per-row monotonic-non-increasing assert is replaced by an edge-by-edge
+  DAG check (parent ≥ child on present-value pairs; edges with a NaN
+  endpoint are skipped). When run as part of the foli pipeline, the
+  QNAME intersection of `assigned_depth` and `good_umi_depth` is
+  expected to equal `properly_mapped_depth` up to chimeric/unpaired
+  alignments that umi_tools sends to BAM only.
+
+### Changed
+
+- `foli get-count-mtx`: the Unassigned-row filter in
+  `get_matrix.process_count_file_simple` and `read_counts` now anchors
+  on the actual `<gene>,<primers>` delimiter (`Unassigned,`) rather
+  than the bare `Unassigned` prefix. The shape of the rows
+  `foli_add_tags` writes for unassigned reads is `Unassigned,<primer>`,
+  so behavior is unchanged in the common path; the anchor just keeps a
+  hypothetical real gene name starting with `Unassigned` from being
+  silently dropped.
+- `foli map` defaults flipped to match the foli-seq protocol and the
+  empirical behavior of recent runs. `--strand` now defaults to `1`
+  (forward-stranded) instead of `0`; `--allow-overlap` and
+  `--allow-multimapping` now default to `true` instead of `false`.
+  Inspecting STAR's `ReadsPerGene.out.tab` across the
+  `20260326_sparc_ibd_clinical_trial_batch2_batch3` run shows `s=2`
+  classifies 50–8000× more reads as `N_noFeature` than `s=0`/`s=1`,
+  while `s=0` and `s=1` are within a few percent of each other —
+  reads sit on the gene's strand, so `s=1` is the right default.
+  Pass `--strand 0` / `--strand 2` / `--no-allow-overlap` /
+  `--no-allow-multimapping` to override.
+- `foli_add_tags --log` SUMMARY semantics: `not_na_adapter` is now
+  adapter-only (R1 QNAMEs whose primer pair was recognized) and
+  `good_umi` requires adapter-ok **and** umi-ok — exactly the
+  `criteria_ok` gate that controls `UC`-tag emission and downstream
+  UMI dedup. SUMMARY field order, `summary_stats` column order, and
+  the README table are flipped to match (`not_na_adapter_depth` →
+  `good_umi_depth`), preserving the monotonic-non-increasing invariant
+  with names that reflect the actual pipeline funnel.
+- `foli count`: umi_tools group flags switched from `output` to
+  `discard` for `--unmapped-reads` and to `use` for `--chimeric-pairs`
+  / `--unpaired-reads`. `discard` for unmapped is TSV-equivalent to
+  `output` (we don't pass `--output-bam`) but lets pysam skip the
+  unmapped tail. `use` for chimeric pairs keeps cross-contig pairs in
+  the bundle path so their multi-gene `XF` (R1's gene + R2's gene,
+  aggregated by `foli_add_tags`) lands as a `GeneA|GeneB` co-assignment
+  column — intentional, to preserve gene-fusion-like signal from
+  amplicons whose primer-end and distal-end map to different genes.
+  `use` for unpaired is irrelevant in foli (data is always paired) and
+  set for symmetry.
+
 ## [0.6.1] - 2026-04-23
 
 ### Added

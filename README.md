@@ -173,19 +173,16 @@ This command performs streamlined alignment and feature counting using `STAR` an
 
 **Core allocation**: The `--cores` parameter is automatically split between STAR (70%) and featureCounts (30%) to optimize pipeline throughput.
 
-For fractional counting of reads that overlap multiple features, you can use the `--allow-overlap` and `--allow-multimapping` flags:
-```bash
-foli map \
-    --input "/path/to/umi_tagged/*_1.fq.gz" \
-    --output-bam "/path/to/mapped_reads" \
-    --output-star "/path/to/star" \
-    --star-index "/path/to/star_index" \
-    --gtf "/path/to/annotation.gtf" \
-    --allow-overlap \
-    --allow-multimapping
-```
-
-These flags enable fractional counting where reads overlapping multiple features or mapping to multiple locations contribute fractionally to each feature.
+**featureCounts defaults.** `foli map` runs featureCounts with
+`--strand 1` (foli-seq is forward-stranded — reads sit on the same
+strand as the gene), `--allow-overlap` (`-O --fraction`), and
+`--allow-multimapping` (`-M --fraction`). The two `--allow-*` flags
+enable fractional counting where reads overlapping multiple features
+or mapping to multiple locations contribute proportionally to each
+target. Pass `--strand 0` (unstranded) or `--strand 2`
+(reverse-stranded) to override; pass `--no-allow-overlap` /
+`--no-allow-multimapping` to disable fractional counting and require
+unique placement instead.
 
 Output files:
 - STAR alignment files in `{output_star}/{sample_name}/`:
@@ -275,17 +272,33 @@ Writes a sample × metric table (TSV/CSV chosen by `--output` extension;
 | --- | --- |
 | `raw_depth` | Read pairs before fastp |
 | `pass_qc_depth` | Read pairs after fastp |
-| `long_read_depth` | Read pairs STAR attempted to align |
-| `good_umi_depth` | Reads with both UMIs well-formed |
-| `not_na_adapter_depth` | Reads with both UMIs and both primers assigned |
-| `properly_mapped_depth` | Reads that produced a count |
+| `long_read_depth` | Read pairs STAR attempted to align (`Number of input reads`) |
+| `not_na_adapter_depth` | QNAMEs with both primers recognized |
+| `good_umi_depth` | QNAMEs with both primers recognized **and** both UMIs well-formed (== R1 records carrying a `UC` tag) |
+| `mapped_depth` | QNAMEs with both primary mates aligned |
+| `assigned_depth` | QNAMEs whose `XF` does not start with `Unassigned` (some mate carried a real gene id in `XT`) |
+| `properly_mapped_depth` | Reads that produced a count (row sums of the raw count matrix) |
 | `n_umi` | Unique UMIs |
 | `n_genes` | Distinct genes detected |
 
-Any flag left unset yields an all-`NA` column. Because each stage only
-drops reads, the row is expected to be monotonically non-increasing;
-`foli summary` raises `AssertionError` otherwise so pipeline
-regressions surface immediately.
+Any flag left unset yields an all-`NA` column. The columns form a DAG —
+two parallel funnels merge at `properly_mapped_depth`:
+
+```
+raw → qc → long ─┬─→ not_na_adapter → good_umi ─┐
+                 └─→ mapped         → assigned ─┴─→ properly_mapped → n_umi → n_genes
+```
+
+`foli summary` asserts each edge (parent ≥ child on present-value pairs)
+so pipeline regressions surface immediately. The `not_na_adapter`,
+`good_umi`, `mapped`, and `assigned` columns are all per-QNAME counters
+emitted by `foli_add_tags` on its `--log` SUMMARY line, so they share
+units with the rest of the table. (featureCounts' `*.summary` `Assigned`
+row counts reads, not pairs, under foli's `-p` invocation, so it is not
+used as the source.) The QNAME-set intersection of `assigned_depth` and
+`good_umi_depth` is expected to equal `properly_mapped_depth` up to the
+small fraction of chimeric or unpaired alignments that umi_tools emits
+to BAM only.
 
 ## Primer Selection Functionality
 

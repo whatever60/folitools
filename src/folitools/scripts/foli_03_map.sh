@@ -15,9 +15,9 @@ show_help() {
     echo "  threads        : Number of threads (default: 1)"
     echo "  skip           : Number of samples to skip (default: 0)"
     echo "  delete         : Delete input files after processing (default: false)"
-    echo "  strand         : Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded) (default: 0)"
-    echo "  allow_overlap  : Allow reads to be assigned to overlapping features (default: false)"
-    echo "  allow_multimapping : Allow multi-mapping reads to be counted (default: false)"
+    echo "  strand         : Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded) (default: 1, foli-seq is forward-stranded)"
+    echo "  allow_overlap  : Allow reads to be assigned to overlapping features (default: true)"
+    echo "  allow_multimapping : Allow multi-mapping reads to be counted (default: true)"
     echo "  -h, --help     : Show this help message"
     exit 0
 }
@@ -36,9 +36,9 @@ GTF_PATH="${5:-}"
 THREADS="${6:-1}"
 SKIP="${7:-0}"
 DELETE="${8:-false}"
-STRAND="${9:-0}"
-ALLOW_OVERLAP="${10:-false}"
-ALLOW_MULTIMAPPING="${11:-false}"
+STRAND="${9:-1}"
+ALLOW_OVERLAP="${10:-True}"
+ALLOW_MULTIMAPPING="${11:-True}"
 
 if [[ -z "$INPUT_FILES" || -z "$OUTPUT_BAM" || -z "$GTF_PATH" ]]; then
     show_help

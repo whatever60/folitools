@@ -140,8 +140,10 @@ pub fn run(args: Args) -> Result<()> {
     // contributes exactly once. Emitted at program end via the SUMMARY line in
     // --log, consumed by folitools.summary.summary_stats.
     let mut total_r1_count: u64 = 0;
-    let mut good_umi_count: u64 = 0;
     let mut not_na_adapter_count: u64 = 0;
+    let mut good_umi_count: u64 = 0;
+    let mut mapped_count: u64 = 0;
+    let mut assigned_count: u64 = 0;
 
     let mut record = Record::new();
 
@@ -162,6 +164,8 @@ pub fn run(args: Args) -> Result<()> {
                 &current_qname,
                 &mut writer,
                 log_fh.as_mut(),
+                &mut mapped_count,
+                &mut assigned_count,
             )?;
             xt_values.clear();
             current_qname.clear();
@@ -205,9 +209,10 @@ pub fn run(args: Args) -> Result<()> {
         let is_primary = (flag & 0x900) == 0;
 
         // Count per-QNAME stats on the primary R1 so each read pair contributes
-        // once. good_umi is UMI-only; not_na_adapter additionally requires both
-        // primers assigned (== criteria_ok below), making it a subset of
-        // good_umi so summary_stats' monotonic-non-increasing assert holds.
+        // once. not_na_adapter is adapter-only; good_umi additionally requires
+        // a clean UMI (== criteria_ok below, the gate for writing the UC tag),
+        // making it a subset of not_na_adapter so summary_stats'
+        // monotonic-non-increasing assert holds.
         if is_read1 && is_primary {
             total_r1_count += 1;
             let umi_ok = umi1.len() == UMI_LEN
@@ -216,11 +221,11 @@ pub fn run(args: Args) -> Result<()> {
                 && !umi2.contains(&b'N');
             let adapter_ok = primer_fwd.as_slice() != b"no_adapter"
                 && primer_rev.as_slice() != b"no_adapter";
-            if umi_ok {
-                good_umi_count += 1;
-            }
-            if umi_ok && adapter_ok {
+            if adapter_ok {
                 not_na_adapter_count += 1;
+            }
+            if adapter_ok && umi_ok {
+                good_umi_count += 1;
             }
         }
 
@@ -288,6 +293,8 @@ pub fn run(args: Args) -> Result<()> {
             &current_qname,
             &mut writer,
             log_fh.as_mut(),
+            &mut mapped_count,
+            &mut assigned_count,
         )?;
     }
 
@@ -299,8 +306,8 @@ pub fn run(args: Args) -> Result<()> {
         let cell_tag_field = args.cell_tag.as_deref().unwrap_or("-");
         writeln!(
             fh,
-            "SUMMARY cell_tag={} total_r1={} good_umi={} not_na_adapter={}",
-            cell_tag_field, total_r1_count, good_umi_count, not_na_adapter_count
+            "SUMMARY cell_tag={} total_r1={} not_na_adapter={} good_umi={} mapped={} assigned={}",
+            cell_tag_field, total_r1_count, not_na_adapter_count, good_umi_count, mapped_count, assigned_count
         )
         .context("write SUMMARY line to log")?;
     }
@@ -323,6 +330,8 @@ fn finalize_group(
     qname: &[u8],
     writer: &mut Writer,
     log_fh: Option<&mut std::fs::File>,
+    mapped_count: &mut u64,
+    assigned_count: &mut u64,
 ) -> Result<()> {
     let mut r1_idxs: Vec<usize> = Vec::new();
     let mut r2_idxs: Vec<usize> = Vec::new();
@@ -398,6 +407,35 @@ fn finalize_group(
                 }
             }
         }
+    }
+
+    // Per-QNAME pipeline-stage counters consumed by folitools.summary. Both
+    // are gated on the primary alignments. mapped: both primary mates landed
+    // (matches STAR's "uniquely mapped + multi" semantics in paired mode and
+    // ensures mapped >= assigned, since featureCounts -B requires both ends
+    // mapped). assigned: at least one mate's XT carried a real gene id, so
+    // XF will not start with "Unassigned" and the read can survive the raw-
+    // count filter in folitools.get_matrix.
+    let mut r1_mapped = false;
+    let mut r2_mapped = false;
+    for r in primaries.iter() {
+        let f = r.flags();
+        if (f & 0x900) != 0 {
+            continue;
+        }
+        let unmapped = (f & 0x4) != 0;
+        if (f & 0x40) != 0 && !unmapped {
+            r1_mapped = true;
+        }
+        if (f & 0x80) != 0 && !unmapped {
+            r2_mapped = true;
+        }
+    }
+    if r1_mapped && r2_mapped {
+        *mapped_count += 1;
+    }
+    if !gene_set.is_empty() {
+        *assigned_count += 1;
     }
     let mut xf_value: Vec<u8> = Vec::new();
     if gene_set.is_empty() {

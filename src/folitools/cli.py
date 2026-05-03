@@ -148,23 +148,23 @@ def map_(
         Literal[0, 1, 2],
         Parameter(
             "--strand",
-            help="Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded).",
+            help="Strand specificity for featureCounts (0=unstranded, 1=stranded, 2=reversely stranded). Defaults to 1 because foli-seq is forward-stranded.",
         ),
-    ] = 0,
+    ] = 1,
     allow_overlap: Annotated[
         bool,
         Parameter(
             "--allow-overlap",
-            help="Allow reads to be assigned to overlapping features. When enabled, passes -O and --fraction to featureCounts.",
+            help="Allow reads to be assigned to overlapping features (default true). Pass --no-allow-overlap to disable. When enabled, passes -O and --fraction to featureCounts.",
         ),
-    ] = False,
+    ] = True,
     allow_multimapping: Annotated[
         bool,
         Parameter(
             "--allow-multimapping",
-            help="Allow multi-mapping reads to be counted. When enabled, passes -M and --fraction to featureCounts.",
+            help="Allow multi-mapping reads to be counted (default true). Pass --no-allow-multimapping to disable. When enabled, passes -M and --fraction to featureCounts.",
         ),
-    ] = False,
+    ] = True,
     skip: Annotated[int, Parameter(help="Number of samples to skip")] = 0,
     delete: Annotated[
         bool, Parameter(help="Delete input files after processing")
@@ -293,7 +293,11 @@ def summary(
         list[str] | None,
         Parameter(
             consume_multiple=True,
-            help="Glob/path/list of foli_add_tags --log files (SUMMARY lines keyed by cell_tag)",
+            help=(
+                "Glob/path/list of foli_add_tags --log files (SUMMARY lines "
+                "keyed by cell_tag). Drives not_na_adapter / good_umi / "
+                "mapped / assigned columns."
+            ),
         ),
     ] = None,
     count_matrix_raw: Annotated[
@@ -307,9 +311,9 @@ def summary(
 ) -> None:
     """Aggregate per-sample read counts from each pipeline stage into one table.
 
-    Any source left unset yields an all-NA column. Columns are ordered so a
-    healthy run is monotonically non-increasing across each row; an assertion
-    fires otherwise so pipeline regressions surface immediately.
+    Any source left unset yields an all-NA column. Columns form a DAG; each
+    edge (parent ≥ child) is asserted on present-value pairs so pipeline
+    regressions surface immediately.
     """
     df = summary_stats(
         fastq_stats=fastq_stats,

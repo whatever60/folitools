@@ -13,6 +13,8 @@ star/
 counts/
 foli_counts.tsv
 
+extern/
+
 # Python-generated files
 __pycache__/
 *.py[oc]

@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
-## [Unreleased]
+## [0.7.0] - 2026-05-03
 
 ### Added
 

@@ -2,6 +2,15 @@
 notebooks/
 AGENTS.md
 .codex
+.claude/
+slides/
+
+# analysis/: track code, ignore data and figures
+analysis/**
+!analysis/**/
+!analysis/**/*.py
+!analysis/**/*.sh
+
 data_temp/
 fastq_fastqc/
 fastp/

@@ -1,58 +1,30 @@
 """Version-stamping helpers for foli-primer outputs.
 
-Each foli-primer subcommand gets at most one version stamp, placed
-where it doesn't disturb the file's primary content:
-
-- ``foli-primer summary``: stamps the workbook's
-  ``properties.description`` core property on its xlsx output(s).
-- ``foli-primer subset`` / ``saddle`` / ``sgad`` / ``product`` /
-  ``recover``: each writes a sibling ``.log`` file (path defaults to
-  ``<output-dir>/<command>.log``, overridable via ``--log``). The log's
-  first line is ``folitools version: <version>``, followed by the
-  command's input/output paths and key parameters.
+Every foli-primer subcommand (``subset`` / ``saddle`` / ``sgad`` /
+``product`` / ``summary`` / ``recover``) writes a sibling ``.log`` file
+whose first line is ``folitools version: <version>``, followed by the
+command's input/output paths and key parameters. The default path is
+``<output-dir>/<command>.log``, overridable via ``--log``.
 
 The version is pulled from ``folitools.__version__`` at write time so
 release bumps flow through automatically.
 
-Outputs that aren't stamped (intentionally):
+Outputs that aren't stamped in-file (intentionally):
 
-- TSV/CSV: the non-matrix shape has no empty top-left cell to repurpose
-  the way ``foli get-count-mtx`` does via ``index_label``.
+- xlsx/TSV/CSV: in-file stamping is brittle (Excel can scrub core
+  properties; TSV/CSV have no obvious carrier cell). The sibling
+  per-command log is the canonical reproducibility anchor instead.
 - FASTA: cutadapt's dnaio reader rejects ``;`` comment lines and
   Biopython's ``fasta`` reader has deprecated ``#`` ones; either
-  marker would break a downstream consumer. Reproducibility for these
-  is covered by the sibling per-command log instead.
+  marker would break a downstream consumer.
 """
 
 import logging
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
-
-import pandas as pd
+from typing import Iterator
 
 from .. import __version__
-
-
-def write_versioned_excel(
-    df: pd.DataFrame, path: str | Path, **kwargs: Any
-) -> None:
-    """``df.to_excel(path, ...)`` followed by stamping workbook properties."""
-    df.to_excel(path, **kwargs)
-    stamp_excel_version(path)
-
-
-def stamp_excel_version(path: str | Path) -> None:
-    """Set the workbook's ``properties.description`` to the folitools version.
-
-    Used after pandas writes an .xlsx so the file carries the version
-    in a place users can inspect via Excel → File → Info → Properties.
-    """
-    from openpyxl import load_workbook
-
-    wb = load_workbook(path)
-    wb.properties.description = f"folitools {__version__}"
-    wb.save(path)
 
 
 def default_command_log_path(

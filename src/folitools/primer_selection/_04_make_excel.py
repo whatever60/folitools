@@ -1,6 +1,5 @@
 import pandas as pd
 
-from ._versioning import write_versioned_excel
 from .utils import get_prefixes
 
 
@@ -67,8 +66,9 @@ def _generate_idt_order_file(
     # Create final output with just the two required columns
     idt_output = idt_df[["Pool name", "Sequence"]]
 
-    # Save to Excel; workbook description carries the folitools version.
-    write_versioned_excel(idt_output, output_idt_order, index=False)
+    # Save to Excel; foli-primer summary writes a sibling summary.log
+    # with the folitools version for reproducibility.
+    idt_output.to_excel(output_idt_order, index=False)
 
     # Print summary
     pool_counts = idt_df["Pool name"].value_counts().sort_index()
@@ -153,7 +153,7 @@ def summary(
     res_df["primer_sequence_to_order_forward"] = FWD_PREFIX + res_df["L_seq"]
     res_df["primer_sequence_to_order_reverse"] = REV_PREFIX + res_df["R_seq"]
     res_df = res_df.sort_values(by=["pool", "Group", "geneSymbol", "Chosen Index"])
-    write_versioned_excel(res_df, output, index=False)
+    res_df.to_excel(output, index=False)
     print(res_df["Group"].value_counts())
 
     # Generate IDT ordering file if requested

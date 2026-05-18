@@ -74,30 +74,23 @@ Starting with version 0.3.2, releases are tracked here.
   - `<dir>.stats` (seqkit `--tabular`) is intentionally **not**
     decorated — it's a strict TSV consumed by `summary_stats` and any
     extra line breaks parsing.
-- `foli-primer` subcommands also stamp, at most once per command and
-  only into surfaces that don't disturb the file's primary content:
-  - `subset`, `saddle`, `sgad`, `product`: each now writes a sibling
-    `.log` file. Default path is `<output-dir>/<command>.log` (e.g.
-    `subset.log`, `saddle.log`); override with the new `--log` flag.
-    First line is the folitools version, followed by resolved inputs
-    and key parameters / counts. `foli-primer workflow` writes one log
-    per stage in the same `--output-dir`.
-  - `summary`: workbook `properties.description` core property on each
-    xlsx output (`primer_to_order.xlsx`, `primer_to_order_idt.xlsx`).
-    Visible via Excel's "File → Info → Properties" dialog or
-    `openpyxl.load_workbook(...).properties.description`.
+- `foli-primer` subcommands stamp uniformly, via a sibling
+  `<command>.log` file:
+  - `subset`, `saddle`, `sgad`, `product`, `summary`: each writes
+    `<output-dir>/<command>.log` (override with `--log`). First line
+    is the folitools version, followed by resolved inputs and key
+    parameters / counts. `foli-primer workflow` writes one log per
+    stage in the same `--output-dir` (including `summary.log`).
   - `recover`: a single `logger.info` line at the top of `recover.log`.
     The CSV / xlsx / PDF / FASTA outputs are deliberately uncluttered.
   - FASTA outputs (`product`'s `amplicons.fasta`, `recover`'s i5/i7
-    short FASTAs) are intentionally **not** stamped: cutadapt's dnaio
-    rejects `;` comment lines and Biopython's `fasta` reader has
+    short FASTAs) are intentionally **not** stamped in-file: cutadapt's
+    dnaio rejects `;` comment lines and Biopython's `fasta` reader has
     deprecated `#` ones, so any in-file marker would risk breaking
     `foli assign-probes` downstream. The sibling per-command log
     covers reproducibility for those.
-  - The xlsx + log helpers live in
-    `folitools.primer_selection._versioning`
-    (`write_versioned_excel`, `command_log`,
-    `default_command_log_path`).
+  - The log helpers live in `folitools.primer_selection._versioning`
+    (`command_log`, `default_command_log_path`).
 
 ### Changed
 

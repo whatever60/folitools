@@ -65,7 +65,7 @@ from ._02_select_primer_set_by_sgad import sgad as _sgad
 from ._03_extract_region_sequence import product as _product
 from ._04_make_excel import summary as _summary
 from ._05_recover import recover as _recover
-from ._versioning import default_command_log_path
+from ._versioning import command_log, default_command_log_path
 
 
 app = App(name="folitools-primer")
@@ -260,6 +260,7 @@ def summary(
     output_idt_order: Path | None = None,
     idt_pool_prefix: str = "pool",
     has_linker: bool = False,
+    log: Path | None = None,
 ) -> int:
     """Generate an Excel file for primer ordering.
 
@@ -271,19 +272,25 @@ def summary(
         output_idt_order: Optional path to output IDT ordering Excel file.
         idt_pool_prefix: Prefix for IDT pool names (default: "pool").
         has_linker: Whether to include linker sequences in primers (default: False).
+        log: Path to a per-run log file. Defaults to
+            ``<dirname(output)>/summary.log``. The first line is the
+            folitools version.
 
     Returns:
         Process exit code.
     """
-    _ = _summary(
-        str(input_),
-        str(primer_selection),
-        str(primer_info),
-        str(output),
-        has_linker=has_linker,
-        output_idt_order=str(output_idt_order) if output_idt_order else None,
-        idt_pool_prefix=idt_pool_prefix,
-    )
+    if log is None:
+        log = default_command_log_path(output, "summary")
+    with command_log(__name__, log):
+        _ = _summary(
+            str(input_),
+            str(primer_selection),
+            str(primer_info),
+            str(output),
+            has_linker=has_linker,
+            output_idt_order=str(output_idt_order) if output_idt_order else None,
+            idt_pool_prefix=idt_pool_prefix,
+        )
     return 0
 
 
@@ -410,17 +417,15 @@ def workflow(
         txome_fasta=txome_fasta,
     )
 
-    # 4) summary (Excel output)
+    # 4) summary (CLI wrapper → output_dir/summary.log)
     excel_out = output_dir / "primer_to_order.xlsx"
     idt_order_out = output_dir / "primer_to_order_idt.xlsx"
-    _summary(
-        input_=str(input_),
-        primer_selection=str(selected_tsv),
-        primer_info=str(primer_info),
-        output=str(excel_out),
-        has_linker=False,
-        output_idt_order=str(idt_order_out),
-        idt_pool_prefix="pool",
+    _ = summary(
+        input_=input_,
+        primer_selection=selected_tsv,
+        primer_info=primer_info,
+        output=excel_out,
+        output_idt_order=idt_order_out,
     )
     return 0
 

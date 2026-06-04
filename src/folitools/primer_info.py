@@ -10,6 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from . import __version__
+from .read_names import sample_name_from_path, split_umi_read_id
 from .utils import expand_path_to_list
 
 
@@ -145,10 +146,7 @@ def process_sample(
                 )
 
             # parse read_id and UMIs: expecting format readid_umi5_umi3
-            parts = r1.id.split("_")
-            if len(parts) != 3:
-                raise ValueError(f"Unexpected read ID format: {r1.id}")
-            read_id, umi5, umi3 = parts
+            read_id, umi5, umi3 = split_umi_read_id(r1.id)
 
             row = {
                 "read_id": read_id,
@@ -179,7 +177,7 @@ def get_read_stats(
     for i, read1_path in enumerate(read1_files):
         if i < skip:
             continue
-        sample = os.path.basename(read1_path).split("_")[0]
+        sample = sample_name_from_path(read1_path)
         out_path = os.path.join(output_dir, f"{sample}.parquet")
         read2_path = read1_path.replace("_1.fq.gz", "_2.fq.gz")
         output_path = os.path.join(output_dir, f"{sample}.parquet")

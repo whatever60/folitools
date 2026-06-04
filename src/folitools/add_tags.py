@@ -4,6 +4,8 @@ from typing import Annotated, TextIO
 import pysam
 from cyclopts import run, Parameter
 
+from .read_names import split_tagged_qname
+
 
 def add_tags_wo_fastq(
     bam_input: str,
@@ -124,7 +126,9 @@ def add_tags_wo_fastq(
 
             # Parse QNAME once. All four splits are cheap; the goal below is
             # to avoid the per-record pysam attribute roundtrips, not this.
-            query_name_simple, umi1, umi2, primers = query_name_current.split("_", 3)
+            query_name_simple, umi1, umi2, primers = split_tagged_qname(
+                query_name_current
+            )
             primer_fwd, primer_rev = primers.split("+")
             read.query_name = query_name_simple
 

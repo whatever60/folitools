@@ -52,6 +52,7 @@ import re
 
 import pandas as pd
 
+from .read_names import read_number_from_path, sample_name_from_path
 from .utils import expand_path_to_list
 
 
@@ -98,11 +99,12 @@ _SUMMARY_KV_RE = re.compile(r"(\w+)=(\S+)")
 
 def _sample_from_seqkit_file(file_field: str) -> str:
     """Replicates ``quality.read_stat`` sample extraction so stats sources align."""
-    return Path(file_field).name.split(".")[0].split("_")[0]
+    return sample_name_from_path(file_field)
 
 
 def _is_r1(file_field: str) -> bool:
-    return "R1_001" in file_field or "_1." in file_field
+    """Return whether a seqkit stats row describes read 1."""
+    return read_number_from_path(file_field) == "r1"
 
 
 def _read_seqkit_r1_counts(path: str) -> pd.Series:

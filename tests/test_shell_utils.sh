@@ -163,7 +163,9 @@ test_extract_sample_name() {
     
     # Complex sample names
     assert_equal "CTRL-01" "$(extract_sample_name "CTRL-01_1.fq.gz")" "extract_sample_name: CTRL-01_1.fq.gz"
-    assert_equal "sample" "$(extract_sample_name "sample.with.dots_1.fq.gz")" "extract_sample_name: sample.with.dots_1.fq.gz"
+    assert_equal "sample.with.dots" "$(extract_sample_name "sample.with.dots_1.fq.gz")" "extract_sample_name: sample.with.dots_1.fq.gz"
+    assert_equal "file_name_with_underscores" "$(extract_sample_name "file_name_with_underscores_R1.fastq.gz")" "extract_sample_name: file_name_with_underscores_R1.fastq.gz"
+    assert_equal "yq-foli-na-ctrl-batch2-YQ1" "$(extract_sample_name "yq-foli-na-ctrl-batch2-YQ1_R1.fastq.gz")" "extract_sample_name: AVITI _R1.fastq.gz"
 }
 
 # Test derive_r2_from_r1 function

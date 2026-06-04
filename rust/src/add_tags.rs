@@ -185,23 +185,7 @@ pub fn run(args: Args) -> Result<()> {
             current_good_umi = false;
         }
 
-        let mut parts = qname.splitn(4, |&b| b == b'_');
-        let id = parts
-            .next()
-            .ok_or_else(|| anyhow!("empty qname"))?
-            .to_vec();
-        let umi1 = parts
-            .next()
-            .ok_or_else(|| bad_qname(&qname, "missing UMI1"))?
-            .to_vec();
-        let umi2 = parts
-            .next()
-            .ok_or_else(|| bad_qname(&qname, "missing UMI2"))?
-            .to_vec();
-        let primers = parts
-            .next()
-            .ok_or_else(|| bad_qname(&qname, "missing primers"))?
-            .to_vec();
+        let (id, umi1, umi2, primers) = split_tagged_qname(&qname)?;
 
         let mut primer_split = primers.splitn(2, |&b| b == b'+');
         let primer_fwd = primer_split.next().unwrap().to_vec();
@@ -354,6 +338,28 @@ fn bad_qname(qname: &[u8], what: &str) -> anyhow::Error {
         what,
         String::from_utf8_lossy(qname).into_owned()
     )
+}
+
+/// Split `<read_id>_<umi5>_<umi3>_<primer5+primer3>` from the right.
+fn split_tagged_qname(qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> {
+    let mut parts = qname.rsplitn(4, |&b| b == b'_');
+    let primers = parts
+        .next()
+        .ok_or_else(|| bad_qname(qname, "missing primers"))?
+        .to_vec();
+    let umi2 = parts
+        .next()
+        .ok_or_else(|| bad_qname(qname, "missing UMI2"))?
+        .to_vec();
+    let umi1 = parts
+        .next()
+        .ok_or_else(|| bad_qname(qname, "missing UMI1"))?
+        .to_vec();
+    let id = parts
+        .next()
+        .ok_or_else(|| bad_qname(qname, "missing read id"))?
+        .to_vec();
+    Ok((id, umi1, umi2, primers))
 }
 
 fn finalize_group(

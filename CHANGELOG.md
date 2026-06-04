@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.8.0] - 2026-06-04
+
+### Added
+
+- AVITI/Base2FastQ naming compatibility for the core foli pipeline. FASTQ
+  sample/read parsing now accepts names such as `<sample>_R1.fastq.gz`
+  alongside Illumina-style `<sample>_S1_L001_R1_001.fastq.gz` and the
+  pipeline's own `<sample>_1.fq.gz` outputs. The shared parsing helpers
+  keep meaningful underscores and dots in sample IDs instead of truncating
+  at the first separator.
+- Regression coverage for AVITI-style filenames, sample IDs with
+  underscores, legacy `/1` and `/2` mate suffixes, and read IDs whose
+  original sequencer component contains underscores.
+
+### Changed
+
+- UMI/read-name parsing now splits the pipeline-appended
+  `<umi5>_<umi3>` and `<primer5+primer3>` fields from the right. This keeps
+  Illumina behavior unchanged while allowing AVITI read IDs such as
+  `AV100007:20260526_DRG_AVITI2:...` to pass through `foli assign-probes`,
+  `foli get-read-stats`, `foli map`, and `foli_add_tags` without being
+  misinterpreted as UMI fields.
+- `foli assign-probes` normalizes legacy mate suffixes (`/1` and `/2`) when
+  comparing paired FASTQ IDs, so exporters that encode mate number in the ID
+  token still interleave cleanly after cutadapt.
+- Summary/QC parsing uses the same sample/read inference as the shell
+  pipeline utilities, so `seqkit` stats and FastQC zips from Illumina,
+  AVITI/Base2FastQ, and folitools intermediate outputs align to the same
+  sample names.
+
 ## [0.7.0] - 2026-05-03
 
 ### Added

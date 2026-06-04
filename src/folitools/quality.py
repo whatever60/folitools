@@ -10,6 +10,8 @@ import pandas as pd
 import polars as pl
 from Bio import SeqIO
 
+from .read_names import read_number_from_path, sample_name_from_path
+
 
 def extract_q30_from_fastqc_zip(zip_path: Path, inner_txt_path: str) -> float:
     """
@@ -66,9 +68,23 @@ def read_stat(path: Path | str) -> pd.DataFrame:
         DataFrame with added 'sample' and 'read' columns.
     """
     df = pd.read_table(path, index_col=0)
-    df["sample"] = df.index.map(lambda x: Path(x).name.split(".")[0].split("_")[0])
-    df["read"] = df.index.map(lambda x: "r1" if "R1_001" in x or "_1." in x else "r2")
+    df["sample"] = df.index.map(sample_name_from_path)
+    df["read"] = df.index.map(read_number_from_path)
     return df
+
+
+def _fastqc_zips_for_read(fq_dir: Path, sample_name: str, read: str) -> list[Path]:
+    """Return FastQC zips for one sample/read across Illumina and AVITI names."""
+    patterns = (
+        f"{sample_name}*_R{read}_*_fastqc.zip",
+        f"{sample_name}*_R{read}_fastqc.zip",
+        f"{sample_name}_{read}_fastqc.zip",
+        f"{sample_name}.{read}_fastqc.zip",
+    )
+    matches: list[Path] = []
+    for pattern in patterns:
+        matches.extend(sorted(fq_dir.glob(pattern)))
+    return matches
 
 
 def deduplicate_umi(df: pl.DataFrame) -> pl.DataFrame:
@@ -292,12 +308,12 @@ class FoliQC:
         fq_dir = self.data_dir / "fastq_fastqc"
         if fq_dir.is_dir():
             # R1
-            r1_zips = list(fq_dir.glob(f"{self.sample_name}_*_R1_001_fastqc.zip"))
+            r1_zips = _fastqc_zips_for_read(fq_dir, self.sample_name, "1")
             if r1_zips:
                 inner = f"{r1_zips[0].stem}/fastqc_data.txt"
                 self.q30_r1 = extract_q30_from_fastqc_zip(r1_zips[0], inner)
             # R2
-            r2_zips = list(fq_dir.glob(f"{self.sample_name}_*_R2_001_fastqc.zip"))
+            r2_zips = _fastqc_zips_for_read(fq_dir, self.sample_name, "2")
             if r2_zips:
                 inner = f"{r2_zips[0].stem}/fastqc_data.txt"
                 self.q30_r2 = extract_q30_from_fastqc_zip(r2_zips[0], inner)

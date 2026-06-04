@@ -84,11 +84,25 @@ extract_sample_name() {
         echo "ERROR: Unsupported file format: $file" >&2
         return 1
     fi
-    
-    # New behavior: sample name is the first token before any '_' or '.'
-    # This replaces earlier logic that only trimmed trailing read indicators.
-    # Example: SAMPLE_ABC_R1_L001 -> SAMPLE; SAMPLE.ABC.R1 -> SAMPLE
-    sample_name="${basename_file%%[._]*}"
+
+    if [[ "$basename_file" == *.sorted ]]; then
+        basename_file="${basename_file%.sorted}"
+    fi
+
+    # Remove only trailing sequencing tokens. This keeps sample IDs such as
+    # treatment_group_001 while accepting both Illumina-style
+    # sample_S1_L001_R1_001 and AVITI/Base2FastQ-style sample_R1 names.
+    if [[ "$basename_file" =~ ^(.+)_S[0-9]+_L[0-9]{3}_[Rr]?[12](_[0-9]{3})?_*$ ]]; then
+        sample_name="${BASH_REMATCH[1]}"
+    elif [[ "$basename_file" =~ ^(.+)_S[0-9]+_[Rr]?[12](_[0-9]{3})?_*$ ]]; then
+        sample_name="${BASH_REMATCH[1]}"
+    elif [[ "$basename_file" =~ ^(.+)_L[0-9]{3}_[Rr]?[12](_[0-9]{3})?_*$ ]]; then
+        sample_name="${BASH_REMATCH[1]}"
+    elif [[ "$basename_file" =~ ^(.+)[._][Rr]?[12](_[0-9]{3})?_*$ ]]; then
+        sample_name="${BASH_REMATCH[1]}"
+    else
+        sample_name="$basename_file"
+    fi
     echo "$sample_name"
 }
 

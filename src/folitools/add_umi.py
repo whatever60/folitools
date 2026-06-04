@@ -1,13 +1,16 @@
 import sys
-from typing import Generator, TextIO, Annotated
+from typing import Annotated, Generator, TextIO
 
 from cyclopts import Parameter, run
 from xopen import xopen
+
+from .read_names import strip_mate_suffix
 
 
 def read_interleaved_fastq(
     fastq_stream,
 ) -> Generator[tuple[str, str, str, str, str, str], None, None]:
+    """Yield paired records from an interleaved FASTQ stream."""
     while True:
         header_1 = fastq_stream.readline().strip()
         if not header_1:
@@ -31,7 +34,14 @@ def add_umi(
     sep: str = "_",
     compression_threads: int = 2,
     compression_level: int = 1,
-):
+) -> None:
+    """
+    Add UMI sequences from primer matches to paired FASTQ read IDs.
+
+    The upstream cutadapt command renames records as
+    ``<id> <adapter_name> <match_sequence>``. R1/R2 IDs may be identical
+    already, or may use legacy ``/1`` and ``/2`` suffixes.
+    """
     # xopen with threads>0 pipes through pigz (or zstd) when the file name
     # ends in a known compressed extension. For a .gz file this avoids the
     # single-threaded gzip.open(..., "wt") that was previously the serial
@@ -60,8 +70,9 @@ def add_umi(
         ) in read_interleaved_fastq(fastq_stream):
             read_id_1, adapter_1, *match_sequence_1 = header_1.split(" ")
             read_id_2, adapter_2, *match_sequence_2 = header_2.split(" ")
+            read_id = strip_mate_suffix(read_id_1)
 
-            if read_id_1 != read_id_2:
+            if read_id != strip_mate_suffix(read_id_2):
                 raise ValueError("FASTQ records are not interleaved")
 
             if match_sequence_1:
@@ -77,8 +88,8 @@ def add_umi(
                 match_sequence_2 = ""
                 umi_2 = ""
 
-            new_id_1 = sep.join([read_id_1, umi_1, umi_2])
-            new_id_2 = sep.join([read_id_2, umi_1, umi_2])
+            new_id_1 = sep.join([read_id, umi_1, umi_2])
+            new_id_2 = sep.join([read_id, umi_1, umi_2])
             new_comment = f"{adapter_1}+{adapter_2}"
 
             new_seq_1 = seq_1[len(umi_1) :]

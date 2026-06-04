@@ -10,6 +10,8 @@ from joblib import Parallel, delayed
 from cyclopts import App, Parameter
 from tqdm.auto import tqdm
 
+from .read_names import sample_name_from_path, split_umi_read_id
+
 
 BATCH_SIZE = 1_000_000
 
@@ -25,7 +27,7 @@ def process_sample(read1_path: str, output_dir: str) -> None:
         read1_path: Path to the R1 FASTQ file (.fq.gz).
         output_dir: Directory to write the final Parquet output.
     """
-    sample = Path(read1_path).name.split("_")[0]
+    sample = sample_name_from_path(read1_path)
     out_path = Path(output_dir) / f"{sample}.parquet"
 
     if os.path.exists(out_path):
@@ -53,7 +55,7 @@ def process_sample(read1_path: str, output_dir: str) -> None:
                     f"Read ID mismatch in sample {sample}: {r1.id} vs {r2.id}"
                 )
             primer_fwd, primer_rev = r1.description.split(" ")[-1].split("+")
-            read_id, umi5, umi3 = r1.id.split("_")
+            read_id, umi5, umi3 = split_umi_read_id(r1.id)
             buffer.append(
                 {
                     "read_id": read_id,

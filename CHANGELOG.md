@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.8.1] - 2026-06-04
+
+### Changed
+
+- `umi_tools` is now installed from our fork, published on PyPI as
+  [`umi-tools-folitools`](https://pypi.org/project/umi-tools-folitools/)
+  (source:
+  [whatever60/UMI-tools@folitools](https://github.com/whatever60/UMI-tools/tree/folitools)),
+  instead of the upstream `umi-tools>=1.1.6` release. The fork is based
+  on current upstream UMI-tools main, installs the same `umi_tools`
+  Python module and `umi_tools` console script, and avoids fresh
+  Python 3.12+ installs falling back to the older 1.1.6 sdist build
+  path.
+
 ## [0.8.0] - 2026-06-04
 
 ### Added

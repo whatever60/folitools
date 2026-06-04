@@ -409,7 +409,7 @@ wheels = [
 
 [[package]]
 name = "folitools"
-version = "0.8.0"
+version = "0.8.1"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },
@@ -433,7 +433,7 @@ dependencies = [
     { name = "seaborn" },
     { name = "sgad" },
     { name = "tqdm" },
-    { name = "umi-tools" },
+    { name = "umi-tools-folitools" },
     { name = "wcmatch" },
     { name = "xopen" },
 ]
@@ -488,7 +488,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sgad", specifier = ">=1.0.1" },
     { name = "tqdm", specifier = ">=4.67.1" },
-    { name = "umi-tools", specifier = ">=1.1.6" },
+    { name = "umi-tools-folitools", specifier = ">=1.1.7.post0" },
     { name = "wcmatch", specifier = ">=10.1" },
     { name = "xopen", specifier = ">=2.0.2" },
 ]
@@ -1762,15 +1762,6 @@ wheels = [
 ]
 
 [[package]]
-name = "setuptools"
-version = "80.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c", size = 1319958, upload-time = "2025-05-27T00:56:51.443Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922", size = 1201486, upload-time = "2025-05-27T00:56:49.664Z" },
-]
-
-[[package]]
 name = "sgad"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1884,8 +1875,8 @@ wheels = [
 ]
 
 [[package]]
-name = "umi-tools"
-version = "1.1.6"
+name = "umi-tools-folitools"
+version = "1.1.7.post0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "future" },
@@ -1896,9 +1887,16 @@ dependencies = [
     { name = "pysam" },
     { name = "regex" },
     { name = "scipy" },
-    { name = "setuptools" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/6e/0e931a777d6105038e11188ee9166586c8e48cbae4277a1e1bc3d8147c2b/umi_tools-1.1.6.tar.gz", hash = "sha256:959c07d9e18d1005fea6e62ca0b82588378a078689f4e02e97ec93b18abd096c", size = 121241, upload-time = "2024-10-09T19:58:07.754Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/de/20aaf2c88a3157244a372b4082e1f57d4e4f1d985d7bc8ec4e99778f8d5c/umi_tools_folitools-1.1.7.post0.tar.gz", hash = "sha256:896a977d6ed8b1e745dd011d954e2dbcc498ce55a0cf4ce7bfc57d53cc6a7974", size = 17049462, upload-time = "2026-06-04T20:44:25.644Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/76/e2a7e0831c5004d3aa28655150d1b136233df38f00ff42a5a05f3ce957ab/umi_tools_folitools-1.1.7.post0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:77b50fe118ce590c5d8f236a522f512421ef828ec644b1f452739172dff45241", size = 17423432, upload-time = "2026-06-04T20:44:11.133Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/16/987eee73fc1a5726b732f550cb2bfe44971b6a3474671521f8ad94e98c8c/umi_tools_folitools-1.1.7.post0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:71832d4864ae3eaca0ce49b89119b64437ef8ae7cb6cdc5f46c2fb80fa311db2", size = 17498343, upload-time = "2026-06-04T20:44:13.764Z" },
+    { url = "https://files.pythonhosted.org/packages/00/c0/3d43b52c0df17b7fa472d947252265eed153dee6d213c3e29e7287c83f0d/umi_tools_folitools-1.1.7.post0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:de773af58eafd8c4d57abc0168b848831d627bd82f1aac86b263a433c76a4c1a", size = 17497474, upload-time = "2026-06-04T20:44:16.447Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/99/d633125c9fcbf5d54fec6c198d73877e549599c0b42354e3bb4dd26bed49/umi_tools_folitools-1.1.7.post0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:bdcae6062b21a4bb6d9cbb8a969c7e6d357b5e3a843e8e51ec55633c84d68337", size = 17422634, upload-time = "2026-06-04T20:44:18.541Z" },
+    { url = "https://files.pythonhosted.org/packages/95/85/7e3cf4c3e6bb701251afc1c4d53d1c16b0ec31db7b6042f14d9c95656aa4/umi_tools_folitools-1.1.7.post0-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:46d90318f97346c804f40f655e9c201f6b3ebe87a7ad819455112b5f51068168", size = 17490784, upload-time = "2026-06-04T20:44:20.779Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/32/5ae68395579638e204b3df314b22eb6898c9cec3cf74846ec702929f54f9/umi_tools_folitools-1.1.7.post0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:9217786a5716a5c3c784029959d79faffd88b4d8e6c3f81ca12f900c95b917b7", size = 17490151, upload-time = "2026-06-04T20:44:23.377Z" },
+]
 
 [[package]]
 name = "wcmatch"

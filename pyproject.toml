@@ -1,6 +1,6 @@
 [project]
 name = "folitools"
-version = "0.8.0"
+version = "0.8.1"
 description = "Foli-seq data processing and analysis tools"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -32,7 +32,12 @@ dependencies = [
     "seaborn>=0.13.2",
     "sgad>=1.0.1",
     "tqdm>=4.67.1",
-    "umi-tools>=1.1.6",
+    # umi-tools is pulled from our fork published on PyPI as
+    # `umi-tools-folitools`. The fork installs the same `umi_tools` Python
+    # module and `umi_tools` console script as upstream UMI-tools, but uses
+    # the current upstream main packaging so fresh Python 3.12+ installs do
+    # not fall back to the older 1.1.6 sdist build path.
+    "umi-tools-folitools>=1.1.7.post0",
     "wcmatch>=10.1",
     "xopen>=2.0.2",
     "openpyxl",

@@ -70,6 +70,23 @@ but the `foli assign-probes` stage will be slower.
 [pypi]: https://pypi.org/project/cutadapt-folitools/
 [fork]: https://github.com/whatever60/cutadapt/tree/folitools-perf
 
+### UMI-tools fork
+
+Starting with folitools 0.8.1, `umi_tools` is installed from our fork,
+published on PyPI as [`umi-tools-folitools`][umi-tools-folitools-pypi]
+(source: [whatever60/UMI-tools@folitools][umi-tools-folitools-fork]).
+The fork is based on current upstream UMI-tools main and installs the same
+`umi_tools` Python module and `umi_tools` console script as upstream, so
+the `foli count` pipeline behavior does not change.
+
+The distinct distribution name avoids depending on upstream
+`umi-tools==1.1.6`, whose sdist build path can fail on fresh Python 3.12+
+environments. Fresh installs can therefore resolve a modern UMI-tools build
+while keeping the command name and import path unchanged.
+
+[umi-tools-folitools-pypi]: https://pypi.org/project/umi-tools-folitools/
+[umi-tools-folitools-fork]: https://github.com/whatever60/UMI-tools/tree/folitools
+
 ## Usage
 
 Each stage of the pipeline is exposed as a command via `foli <subcommand>`.
@@ -599,4 +616,3 @@ During the pipeline, feature names evolve through several stages. When `cutadapt
 In summary, the resulting count matrix has samples as rows and "enhanced" gene features as columns. Single-mapping genes appear as simple gene symbols (`FGR`, `GAPDH`), while multi-mapping gene families are indicated with pipe-separated names (`BCL9L|CXCR5`). Thus, the values represent UMI-deduplicated read counts where each UMI corresponds to one original mRNA molecule, and multiple amplicons targeting the same gene are averaged. This design handles amplicon multiplicity through count aggregation and preserves biological ambiguity due to sequence similarity, providing gene-level quantification suitable for differential expression analysis.
 
 ## TODOs
-

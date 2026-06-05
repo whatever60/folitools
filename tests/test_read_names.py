@@ -60,13 +60,41 @@ def test_split_umi_read_id_allows_underscores_in_original_id() -> None:
 
 
 def test_split_tagged_qname_allows_underscores_in_original_id() -> None:
-    """Mapping QNAME parsing should split UMI and primer fields from the right."""
-    assert split_tagged_qname("READ_with_underscores_ACGTAA_TTGGCC_FWD+REV") == (
+    """Mapping QNAME parsing should allow underscores in the original ID."""
+    assert split_tagged_qname("READ_with_underscores_ACGTAA_TTGGCC|FWD+REV") == (
         "READ_with_underscores",
         "ACGTAA",
         "TTGGCC",
         "FWD+REV",
     )
+
+
+@pytest.mark.parametrize(
+    "qname,expected",
+    [
+        (
+            "READ_with_underscores_AAACGC_TTGGCC|MUC2+no_adapter",
+            ("READ_with_underscores", "AAACGC", "TTGGCC", "MUC2+no_adapter"),
+        ),
+        (
+            "READ_AAACGC_TTGGCC|no_adapter+MUC2",
+            ("READ", "AAACGC", "TTGGCC", "no_adapter+MUC2"),
+        ),
+        (
+            "READ_AAACGC_|MUC2+no_adapter",
+            ("READ", "AAACGC", "", "MUC2+no_adapter"),
+        ),
+        (
+            "READ__|no_adapter+no_adapter",
+            ("READ", "", "", "no_adapter+no_adapter"),
+        ),
+    ],
+)
+def test_split_tagged_qname_allows_underscores_in_primer_names(
+    qname: str, expected: tuple[str, str, str, str]
+) -> None:
+    """Mapping QNAME parsing should allow underscores in primer names."""
+    assert split_tagged_qname(qname) == expected
 
 
 def test_strip_mate_suffix_removes_legacy_read_suffix() -> None:

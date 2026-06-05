@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.8.2] - 2026-06-05
+
+### Fixed
+
+- `foli map` now preserves cutadapt's primer-pair comment in STAR QNAMEs
+  with an explicit `|` separator, producing
+  `<read_id>_<umi5>_<umi3>|<primer5+primer3>` instead of adding another
+  underscore-delimited field. This keeps primer names such as
+  `no_adapter` unambiguous and fixes `foli_add_tags` failures such as
+  `qname primers missing '+'` for QNAMEs ending in
+  `MUC2+no_adapter`, `no_adapter+MUC2`, or `no_adapter+no_adapter`.
+- The Python and Rust QNAME parsers now use the same explicit separator
+  format and keep empty UMI fields valid for no-adapter reads.
+
 ## [0.8.1] - 2026-06-04
 
 ### Changed

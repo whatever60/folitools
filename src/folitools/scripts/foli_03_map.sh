@@ -237,9 +237,10 @@ for input_file in "${input_files[@]}"; do
             | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
                '
                     {
-                        # Replace space with underscore only on header lines
+                        # Preserve cutadapt's primer-pair comment in STAR QNAMEs
+                        # using an explicit separator, not an underscore.
                         if ((NR - 1) % 4 == 0) {
-                            gsub(" ", "_", $0)
+                            sub(" ", "|", $0)
                         }
 
                         # Write to R1 (first 4 lines) or R2 (next 4 lines) in each 8-line block

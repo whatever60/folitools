@@ -18,6 +18,7 @@ _READ_RE = re.compile(
     r"^(?P<sample>.+?)(?:_S\d+)?(?:_L\d{3})?[._](?P<read>R?[12])(?:_\d{3})?_*$",
     re.IGNORECASE,
 )
+QNAME_PRIMER_SEPARATOR = "|"
 
 
 def strip_path_suffix(path: str | Path) -> str:
@@ -68,8 +69,12 @@ def split_umi_read_id(read_id: str) -> tuple[str, str, str]:
 
 
 def split_tagged_qname(qname: str) -> tuple[str, str, str, str]:
-    """Split ``<read_id>_<umi5>_<umi3>_<primer5+primer3>`` from the right."""
-    parts = qname.rsplit("_", 3)
-    if len(parts) != 4:
+    """Split ``<read_id>_<umi5>_<umi3>|<primer5+primer3>`` from a QNAME."""
+    parts = qname.rsplit(QNAME_PRIMER_SEPARATOR, 1)
+    if len(parts) != 2:
         raise ValueError(f"Unexpected read ID format: {qname}")
-    return parts[0], parts[1], parts[2], parts[3]
+    read_id_with_umis, primers = parts
+    if "+" not in primers:
+        raise ValueError(f"Unexpected primer format in read ID: {qname}")
+    read_id, umi1, umi2 = split_umi_read_id(read_id_with_umis)
+    return read_id, umi1, umi2, primers

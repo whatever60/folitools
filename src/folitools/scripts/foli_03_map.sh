@@ -237,7 +237,7 @@ for input_file in "${input_files[@]}"; do
             | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
                '
                     {
-                        # Preserve cutadapt's primer-pair comment in STAR QNAMEs
+                        # Preserve cutadapt primer-pair comments in STAR QNAMEs
                         # using an explicit separator, not an underscore.
                         if ((NR - 1) % 4 == 0) {
                             sub(" ", "|", $0)

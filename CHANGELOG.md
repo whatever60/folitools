@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.8.3] - 2026-06-05
+
+### Fixed
+
+- Fixed a shell quoting bug in `foli_03_map.sh`: an apostrophe inside an awk
+  comment caused bash to terminate the single-quoted awk program early,
+  producing `syntax error near unexpected token '%'` before the map step could
+  run.
+
 ## [0.8.2] - 2026-06-05
 
 ### Fixed

@@ -366,7 +366,7 @@ fn split_umi_read_id(read_id: &[u8], qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, 
 fn split_tagged_qname(qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> {
     let primer_sep = qname
         .iter()
-        .rposition(|&b| b == QNAME_PRIMER_SEPARATOR)
+        .position(|&b| b == QNAME_PRIMER_SEPARATOR)
         .ok_or_else(|| bad_qname(qname, "missing primer separator"))?;
     let read_id_with_umis = &qname[..primer_sep];
     let primers = &qname[primer_sep + 1..];
@@ -390,6 +390,13 @@ mod tests {
         assert_eq!(umi1, b"AAACGC");
         assert_eq!(umi2, b"TTGGCC");
         assert_eq!(primers, b"MUC2+no_adapter");
+
+        let (id, umi1, umi2, primers) =
+            split_tagged_qname(b"READ_AAACGC_TTGGCC|CCL4|CCL4L2+CCL4|CCL4L2")?;
+        assert_eq!(id, b"READ");
+        assert_eq!(umi1, b"AAACGC");
+        assert_eq!(umi2, b"TTGGCC");
+        assert_eq!(primers, b"CCL4|CCL4L2+CCL4|CCL4L2");
         Ok(())
     }
 

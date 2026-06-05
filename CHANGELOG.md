@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.8.4] - 2026-06-05
+
+### Fixed
+
+- `foli_add_tags` now splits the mapped QNAME on the first explicit primer
+  separator (`|`) instead of the last one. This keeps primer names that contain
+  `|`, such as `CCL4|CCL4L2+CCL4|CCL4L2`, intact and fixes the repeated
+  `qname primers missing '+'` failures seen in `foli map`.
+
 ## [0.8.3] - 2026-06-05
 
 ### Fixed

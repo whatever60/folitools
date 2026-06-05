@@ -70,7 +70,7 @@ def split_umi_read_id(read_id: str) -> tuple[str, str, str]:
 
 def split_tagged_qname(qname: str) -> tuple[str, str, str, str]:
     """Split ``<read_id>_<umi5>_<umi3>|<primer5+primer3>`` from a QNAME."""
-    parts = qname.rsplit(QNAME_PRIMER_SEPARATOR, 1)
+    parts = qname.split(QNAME_PRIMER_SEPARATOR, 1)
     if len(parts) != 2:
         raise ValueError(f"Unexpected read ID format: {qname}")
     read_id_with_umis, primers = parts

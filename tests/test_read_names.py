@@ -81,6 +81,10 @@ def test_split_tagged_qname_allows_underscores_in_original_id() -> None:
             ("READ", "AAACGC", "TTGGCC", "no_adapter+MUC2"),
         ),
         (
+            "READ_AAACGC_TTGGCC|CCL4|CCL4L2+CCL4|CCL4L2",
+            ("READ", "AAACGC", "TTGGCC", "CCL4|CCL4L2+CCL4|CCL4L2"),
+        ),
+        (
             "READ_AAACGC_|MUC2+no_adapter",
             ("READ", "AAACGC", "", "MUC2+no_adapter"),
         ),

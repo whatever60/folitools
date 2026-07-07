@@ -18,7 +18,7 @@ _READ_RE = re.compile(
     r"^(?P<sample>.+?)(?:_S\d+)?(?:_L\d{3})?[._](?P<read>R?[12])(?:_\d{3})?_*$",
     re.IGNORECASE,
 )
-QNAME_PRIMER_SEPARATOR = "|"
+_UMI_RE = re.compile(r"^[ACGTN]*$", re.IGNORECASE)
 
 
 def strip_path_suffix(path: str | Path) -> str:
@@ -61,7 +61,7 @@ def strip_mate_suffix(read_id: str) -> str:
 
 
 def split_umi_read_id(read_id: str) -> tuple[str, str, str]:
-    """Split ``<read_id>_<umi5>_<umi3>`` while allowing underscores in read_id."""
+    """Split ``<read_id>_<umi1>_<umi2>`` while allowing underscores in read_id."""
     parts = read_id.rsplit("_", 2)
     if len(parts) != 3:
         raise ValueError(f"Unexpected read ID format: {read_id}")
@@ -69,12 +69,19 @@ def split_umi_read_id(read_id: str) -> tuple[str, str, str]:
 
 
 def split_tagged_qname(qname: str) -> tuple[str, str, str, str]:
-    """Split ``<read_id>_<umi5>_<umi3>|<primer5+primer3>`` from a QNAME."""
-    parts = qname.split(QNAME_PRIMER_SEPARATOR, 1)
-    if len(parts) != 2:
-        raise ValueError(f"Unexpected read ID format: {qname}")
-    read_id_with_umis, primers = parts
-    if "+" not in primers:
-        raise ValueError(f"Unexpected primer format in read ID: {qname}")
-    read_id, umi1, umi2 = split_umi_read_id(read_id_with_umis)
-    return read_id, umi1, umi2, primers
+    """Split the 0.7-style ``<read_id>_<umi1>_<umi2>_<primer1+primer2>`` QNAME."""
+    parts = qname.split("_")
+    for primer_idx in range(3, len(parts)):
+        umi1 = parts[primer_idx - 2]
+        umi2 = parts[primer_idx - 1]
+        primers = "_".join(parts[primer_idx:])
+        if (
+            _UMI_RE.match(umi1) is not None
+            and _UMI_RE.match(umi2) is not None
+            and "+" in primers
+        ):
+            read_id = "_".join(parts[: primer_idx - 2])
+            if read_id == "":
+                raise ValueError(f"Unexpected read ID format: {qname}")
+            return read_id, umi1, umi2, primers
+    raise ValueError(f"Unexpected read ID format: {qname}")

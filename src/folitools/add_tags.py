@@ -25,10 +25,10 @@ def add_tags_wo_fastq(
 
     VERY IMPORTANT NOTE:
         The read IDs must be formatted as:
-            <original_read_id>_{umi_r1}_{umi_r2}|{primer_r1}+{primer_r2}
+            <original_read_id>_{umi_r1}_{umi_r2}
         where the two UMI sequences are appended to the original read name,
-        separated by underscores, and the primer pair is separated with ``|``.
-        These fields will be split out and tagged appropriately.
+        separated by underscores. These UMIs will be split out and tagged
+        appropriately.
 
     Args:
         bam_input: Standard input stream for SAM data.

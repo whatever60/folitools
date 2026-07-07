@@ -165,22 +165,6 @@ def test_summary_stats_missing_sources_yield_nan(tmp_path: Path) -> None:
         assert pd.isna(result.loc["s1", col]), f"{col} should be NA"
 
 
-def test_summary_stats_parses_aviti_read_names(tmp_path: Path) -> None:
-    """seqkit rows named sample_R1.fastq.gz should populate raw_depth."""
-    _write_seqkit_stats(
-        tmp_path / "fastq.stats",
-        [
-            ("sample_with_underscore_R1.fastq.gz", 123),
-            ("sample_with_underscore_R2.fastq.gz", 123),
-        ],
-    )
-
-    result = summary_stats(fastq_stats=str(tmp_path / "fastq.stats"))
-
-    assert list(result.index) == ["sample_with_underscore"]
-    assert result.loc["sample_with_underscore", "raw_depth"] == 123
-
-
 def test_summary_stats_rejects_dag_violation(tmp_path: Path) -> None:
     _write_seqkit_stats(
         tmp_path / "fastq.stats",

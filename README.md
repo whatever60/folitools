@@ -72,8 +72,8 @@ but the `foli assign-probes` stage will be slower.
 
 ### UMI-tools fork
 
-Starting with folitools 0.8.1, `umi_tools` is installed from our fork,
-published on PyPI as [`umi-tools-folitools`][umi-tools-folitools-pypi]
+`umi_tools` is installed from our fork, published on PyPI as
+[`umi-tools-folitools`][umi-tools-folitools-pypi]
 (source: [whatever60/UMI-tools@folitools][umi-tools-folitools-fork]).
 The fork is based on current upstream UMI-tools main and installs the same
 `umi_tools` Python module and `umi_tools` console script as upstream, so

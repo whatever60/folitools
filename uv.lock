@@ -409,7 +409,7 @@ wheels = [
 
 [[package]]
 name = "folitools"
-version = "0.8.4"
+version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },
@@ -431,7 +431,6 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "seaborn" },
-    { name = "sgad" },
     { name = "tqdm" },
     { name = "umi-tools-folitools" },
     { name = "wcmatch" },
@@ -486,7 +485,6 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.7.0" },
     { name = "scipy", specifier = ">=1.16.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "sgad", specifier = ">=1.0.1" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "umi-tools-folitools", specifier = ">=1.1.7.post0" },
     { name = "wcmatch", specifier = ">=10.1" },
@@ -1759,20 +1757,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f5/dc/4a0c85aee2034be368d3ca293a563128122dde6db6e1bc9ca9ef3472c731/session_info-1.0.1.tar.gz", hash = "sha256:d71950d5a8ce7f7f7d5e86aa208c148c4e50b5440b77d5544d422b48e4f3ed41", size = 24663, upload-time = "2025-04-11T16:08:43.504Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c5/c4/f6b7c0ec5241a2bde90c7ba1eca6ba44f8488bcedafe9072c79593015ec0/session_info-1.0.1-py3-none-any.whl", hash = "sha256:451d191e51816070b9f21a6ff3f6eb5d6015ae2738e8db63ac4e6398260a5838", size = 9119, upload-time = "2025-04-11T16:08:42.612Z" },
-]
-
-[[package]]
-name = "sgad"
-version = "1.0.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/e2/3aaf714a411414ace6d4b9db9bfcd69520b9769d556aad9414dafb19e490/sgad-1.0.1.tar.gz", hash = "sha256:9b588d7c185ee4734d47678b260c9efeb3d02ef01e7b2d1421e3c1f69e19cf3a", size = 20850, upload-time = "2026-03-11T20:56:37.988Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/ff/05d1b98abc1dd26309501e318a02b4c8fdda68d80411323cb0a1cd73c960/sgad-1.0.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:af8f85d1f6b690f113123eb8ac341d1d2762b75577683f2ed88462ac18e5827a", size = 247287, upload-time = "2026-03-11T20:56:33.763Z" },
-    { url = "https://files.pythonhosted.org/packages/1b/32/51d1af01c629dde30a336c0231ebde2bd1854d9f9982608a40bbdab87843/sgad-1.0.1-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:edc76b206a01d12b06a8ed1efa48ab5de60976799f962c92477a1b2cf8d676df", size = 277618, upload-time = "2026-03-11T20:56:35.276Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/8a/de6858f97533b4eb9a257a208cb960876490383dc9eb77ba210838484942/sgad-1.0.1-cp310-abi3-win_amd64.whl", hash = "sha256:5aaa7599093716e6674d143e56b8d8757d9d4a03fc6cffda3037644a9cee4a92", size = 153824, upload-time = "2026-03-11T20:56:36.634Z" },
 ]
 
 [[package]]

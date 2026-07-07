@@ -38,9 +38,8 @@ def add_umi(
     """
     Add UMI sequences from primer matches to paired FASTQ read IDs.
 
-    The upstream cutadapt command renames records as
-    ``<id> <adapter_name> <match_sequence>``. R1/R2 IDs may be identical
-    already, or may use legacy ``/1`` and ``/2`` suffixes.
+    The output keeps the 0.7-style name shape:
+    ``<read_id>_<umi_r1>_<umi_r2> <primer_r1+primer_r2>``.
     """
     # xopen with threads>0 pipes through pigz (or zstd) when the file name
     # ends in a known compressed extension. For a .gz file this avoids the

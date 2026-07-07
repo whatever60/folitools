@@ -4,81 +4,21 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
-## [0.8.4] - 2026-06-05
+## [0.9.0] - 2026-07-07
 
 ### Fixed
 
-- `foli_add_tags` now splits the mapped QNAME on the first explicit primer
-  separator (`|`) instead of the last one. This keeps primer names that contain
-  `|`, such as `CCL4|CCL4L2+CCL4|CCL4L2`, intact and fixes the repeated
-  `qname primers missing '+'` failures seen in `foli map`.
-
-## [0.8.3] - 2026-06-05
-
-### Fixed
-
-- Fixed a shell quoting bug in `foli_03_map.sh`: an apostrophe inside an awk
-  comment caused bash to terminate the single-quoted awk program early,
-  producing `syntax error near unexpected token '%'` before the map step could
-  run.
-
-## [0.8.2] - 2026-06-05
-
-### Fixed
-
-- `foli map` now preserves cutadapt's primer-pair comment in STAR QNAMEs
-  with an explicit `|` separator, producing
-  `<read_id>_<umi5>_<umi3>|<primer5+primer3>` instead of adding another
-  underscore-delimited field. This keeps primer names such as
-  `no_adapter` unambiguous and fixes `foli_add_tags` failures such as
-  `qname primers missing '+'` for QNAMEs ending in
-  `MUC2+no_adapter`, `no_adapter+MUC2`, or `no_adapter+no_adapter`.
-- The Python and Rust QNAME parsers now use the same explicit separator
-  format and keep empty UMI fields valid for no-adapter reads.
-
-## [0.8.1] - 2026-06-04
-
-### Changed
-
-- `umi_tools` is now installed from our fork, published on PyPI as
-  [`umi-tools-folitools`](https://pypi.org/project/umi-tools-folitools/)
-  (source:
-  [whatever60/UMI-tools@folitools](https://github.com/whatever60/UMI-tools/tree/folitools)),
-  instead of the upstream `umi-tools>=1.1.6` release. The fork is based
-  on current upstream UMI-tools main, installs the same `umi_tools`
-  Python module and `umi_tools` console script, and avoids fresh
-  Python 3.12+ installs falling back to the older 1.1.6 sdist build
-  path.
-
-## [0.8.0] - 2026-06-04
-
-### Added
-
-- AVITI/Base2FastQ naming compatibility for the core foli pipeline. FASTQ
-  sample/read parsing now accepts names such as `<sample>_R1.fastq.gz`
-  alongside Illumina-style `<sample>_S1_L001_R1_001.fastq.gz` and the
-  pipeline's own `<sample>_1.fq.gz` outputs. The shared parsing helpers
-  keep meaningful underscores and dots in sample IDs instead of truncating
-  at the first separator.
-- Regression coverage for AVITI-style filenames, sample IDs with
-  underscores, legacy `/1` and `/2` mate suffixes, and read IDs whose
-  original sequencer component contains underscores.
-
-### Changed
-
-- UMI/read-name parsing now splits the pipeline-appended
-  `<umi5>_<umi3>` and `<primer5+primer3>` fields from the right. This keeps
-  Illumina behavior unchanged while allowing AVITI read IDs such as
-  `AV100007:20260526_DRG_AVITI2:...` to pass through `foli assign-probes`,
-  `foli get-read-stats`, `foli map`, and `foli_add_tags` without being
-  misinterpreted as UMI fields.
-- `foli assign-probes` normalizes legacy mate suffixes (`/1` and `/2`) when
-  comparing paired FASTQ IDs, so exporters that encode mate number in the ID
-  token still interleave cleanly after cutadapt.
-- Summary/QC parsing uses the same sample/read inference as the shell
-  pipeline utilities, so `seqkit` stats and FastQC zips from Illumina,
-  AVITI/Base2FastQ, and folitools intermediate outputs align to the same
-  sample names.
+- Replaces the yanked 0.8.x release line with a simpler read-name parsing
+  implementation for AVITI-style read IDs while preserving the 0.7 FASTQ/QNAME
+  shape used by the mapping pipeline.
+- Keeps primer names containing `|`, underscores, or `no_adapter` parseable by
+  deriving UMI fields from nucleotide-only tokens instead of introducing a new
+  primer separator into mapped QNAMEs.
+- Defers SGAD imports until `foli-primer sgad` is invoked and removes SGAD from
+  the base dependency set; SGAD-backed primer selection will return as an
+  optional-extra integration in 0.10.0.
+- Adds regression coverage for AVITI read IDs, legacy `/1` and `/2` mate
+  suffixes, empty UMI fields, and primer names with embedded separators.
 
 ## [0.7.0] - 2026-05-03
 

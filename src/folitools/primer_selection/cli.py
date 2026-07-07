@@ -61,7 +61,6 @@ from cyclopts import App
 
 from ._01_primer_selection import subset as _subset
 from ._02_select_primer_set_by_saddle_loss import saddle as _saddle
-from ._02_select_primer_set_by_sgad import sgad as _sgad
 from ._03_extract_region_sequence import product as _product
 from ._04_make_excel import summary as _summary
 from ._05_recover import recover as _recover
@@ -190,6 +189,8 @@ def sgad(
     Returns:
         Process exit code.
     """
+    from ._02_select_primer_set_by_sgad import sgad as _sgad
+
     if log is None:
         log = default_command_log_path(output, "sgad")
     _ = _sgad(

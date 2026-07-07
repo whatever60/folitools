@@ -59,45 +59,62 @@ def test_split_umi_read_id_allows_underscores_in_original_id() -> None:
     )
 
 
-def test_split_tagged_qname_allows_underscores_in_original_id() -> None:
-    """Mapping QNAME parsing should allow underscores in the original ID."""
-    assert split_tagged_qname("READ_with_underscores_ACGTAA_TTGGCC|FWD+REV") == (
-        "READ_with_underscores",
-        "ACGTAA",
-        "TTGGCC",
-        "FWD+REV",
-    )
-
-
 @pytest.mark.parametrize(
     "qname,expected",
     [
         (
-            "READ_with_underscores_AAACGC_TTGGCC|MUC2+no_adapter",
+            "READ_with_underscores_AAACGC_TTGGCC_MUC2+no_adapter",
             ("READ_with_underscores", "AAACGC", "TTGGCC", "MUC2+no_adapter"),
         ),
         (
-            "READ_AAACGC_TTGGCC|no_adapter+MUC2",
+            "READ_AAACGC_TTGGCC_no_adapter+MUC2",
             ("READ", "AAACGC", "TTGGCC", "no_adapter+MUC2"),
         ),
         (
-            "READ_AAACGC_TTGGCC|CCL4|CCL4L2+CCL4|CCL4L2",
+            "READ_AAACGC_TTGGCC_CCL4|CCL4L2+CCL4|CCL4L2",
             ("READ", "AAACGC", "TTGGCC", "CCL4|CCL4L2+CCL4|CCL4L2"),
         ),
         (
-            "READ_AAACGC_|MUC2+no_adapter",
+            "AV100007:20260526_DRG_AVITI2:2519664043:2:11001:1159:1029_TGCTCA_CCCGTG_CCL4|CCL4L2+CCL4|CCL4L2",
+            (
+                "AV100007:20260526_DRG_AVITI2:2519664043:2:11001:1159:1029",
+                "TGCTCA",
+                "CCCGTG",
+                "CCL4|CCL4L2+CCL4|CCL4L2",
+            ),
+        ),
+        (
+            "AV100007:20260526_DRG_AVITI2:2519664043:2:20905:0584:2299_AACCGA_TGAGT_GAPDH+GAPDH",
+            (
+                "AV100007:20260526_DRG_AVITI2:2519664043:2:20905:0584:2299",
+                "AACCGA",
+                "TGAGT",
+                "GAPDH+GAPDH",
+            ),
+        ),
+        (
+            "AV100007:20260526_DRG_AVITI2:2519664043:2:21402:2802:3497_AGGAAAT_CTCGGA_RPS18+RPS18",
+            (
+                "AV100007:20260526_DRG_AVITI2:2519664043:2:21402:2802:3497",
+                "AGGAAAT",
+                "CTCGGA",
+                "RPS18+RPS18",
+            ),
+        ),
+        (
+            "READ_AAACGC__MUC2+no_adapter",
             ("READ", "AAACGC", "", "MUC2+no_adapter"),
         ),
         (
-            "READ__|no_adapter+no_adapter",
+            "READ___no_adapter+no_adapter",
             ("READ", "", "", "no_adapter+no_adapter"),
         ),
     ],
 )
-def test_split_tagged_qname_allows_underscores_in_primer_names(
+def test_split_tagged_qname_keeps_0_7_underscore_format(
     qname: str, expected: tuple[str, str, str, str]
 ) -> None:
-    """Mapping QNAME parsing should allow underscores in primer names."""
+    """Mapping QNAME parsing should keep old names while allowing AVITI IDs."""
     assert split_tagged_qname(qname) == expected
 
 

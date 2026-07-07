@@ -67,7 +67,7 @@ is_alignment_file() {
 extract_sample_name() {
     local file="$1"
     local basename_file sample_name
-    
+
     if [[ "$file" == *.bam ]]; then
         basename_file="$(basename "$file" .bam)"
     elif [[ "$file" == *.sam ]]; then
@@ -110,7 +110,7 @@ extract_sample_name() {
 derive_r2_from_r1() {
     local r1_file="$1"
     local r2_file
-    
+
     # Try different R1/R2 patterns - order matters!
     if [[ "$r1_file" == *_R1.* ]]; then
         r2_file="${r1_file/_R1./_R2.}"
@@ -130,7 +130,7 @@ derive_r2_from_r1() {
         local extension="${r1_file##*.}"
         r2_file="${basename}_R2.${extension}"
     fi
-    
+
     echo "$r2_file"
 }
 
@@ -138,9 +138,9 @@ derive_r2_from_r1() {
 validate_file_formats() {
     local file_list="$1"
     local allowed_formats="$2"  # "fastq", "alignment", or "both"
-    
+
     read -ra files <<< "$file_list"
-    
+
     for file in "${files[@]}"; do
         case "$allowed_formats" in
             "fastq")
@@ -167,7 +167,7 @@ validate_file_formats() {
                 ;;
         esac
     done
-    
+
     return 0
 }
 

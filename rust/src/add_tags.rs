@@ -340,76 +340,100 @@ fn bad_qname(qname: &[u8], what: &str) -> anyhow::Error {
     )
 }
 
-const QNAME_PRIMER_SEPARATOR: u8 = b'|';
-
-/// Split `<read_id>_<umi5>_<umi3>` while allowing underscores in read IDs.
-fn split_umi_read_id(read_id: &[u8], qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-    let umi2_sep = read_id
-        .iter()
-        .rposition(|&b| b == b'_')
-        .ok_or_else(|| bad_qname(qname, "missing UMI2"))?;
-    let umi2 = &read_id[umi2_sep + 1..];
-    let before_umi2 = &read_id[..umi2_sep];
-    let umi1_sep = before_umi2
-        .iter()
-        .rposition(|&b| b == b'_')
-        .ok_or_else(|| bad_qname(qname, "missing UMI1"))?;
-    let umi1 = &before_umi2[umi1_sep + 1..];
-    let id = &before_umi2[..umi1_sep];
-    if id.is_empty() {
-        return Err(bad_qname(qname, "missing read id"));
-    }
-    Ok((id.to_vec(), umi1.to_vec(), umi2.to_vec()))
-}
-
-/// Split `<read_id>_<umi5>_<umi3>|<primer5+primer3>` from a mapped QNAME.
+/// Split the 0.7-style `<read_id>_<umi1>_<umi2>_<primer1+primer2>` QNAME.
 fn split_tagged_qname(qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> {
-    let primer_sep = qname
-        .iter()
-        .position(|&b| b == QNAME_PRIMER_SEPARATOR)
-        .ok_or_else(|| bad_qname(qname, "missing primer separator"))?;
-    let read_id_with_umis = &qname[..primer_sep];
-    let primers = &qname[primer_sep + 1..];
-    if !primers.contains(&b'+') {
-        return Err(bad_qname(qname, "primers missing '+'"));
+    let parts: Vec<&[u8]> = qname.split(|&b| b == b'_').collect();
+    if parts.len() < 4 {
+        return Err(bad_qname(qname, "missing UMI fields"));
     }
-    let (id, umi1, umi2) = split_umi_read_id(read_id_with_umis, qname)?;
-    Ok((id, umi1, umi2, primers.to_vec()))
+
+    for primer_idx in 3..parts.len() {
+        let umi1 = parts[primer_idx - 2];
+        let umi2 = parts[primer_idx - 1];
+        let umi1_ok = umi1.iter().all(|b| {
+            matches!(
+                b,
+                b'A' | b'C' | b'G' | b'T' | b'N' | b'a' | b'c' | b'g' | b't' | b'n'
+            )
+        });
+        let umi2_ok = umi2.iter().all(|b| {
+            matches!(
+                b,
+                b'A' | b'C' | b'G' | b'T' | b'N' | b'a' | b'c' | b'g' | b't' | b'n'
+            )
+        });
+        let primers = parts[primer_idx..].join(&b'_');
+        if umi1_ok && umi2_ok && primers.contains(&b'+') {
+            let id = parts[..primer_idx - 2].join(&b'_');
+            if id.is_empty() {
+                return Err(bad_qname(qname, "missing read id"));
+            }
+            return Ok((id, umi1.to_vec(), umi2.to_vec(), primers));
+        }
+    }
+
+    Err(bad_qname(qname, "missing UMI fields"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// QNAME parsing should use the explicit primer separator.
+    /// QNAME parsing should keep the 0.7 underscore format but allow AVITI IDs.
     #[test]
-    fn split_tagged_qname_uses_primer_separator() -> Result<()> {
+    fn split_tagged_qname_keeps_underscore_format() -> Result<()> {
         let (id, umi1, umi2, primers) =
-            split_tagged_qname(b"READ_with_underscores_AAACGC_TTGGCC|MUC2+no_adapter")?;
+            split_tagged_qname(b"READ_with_underscores_AAACGC_TTGGCC_MUC2+no_adapter")?;
         assert_eq!(id, b"READ_with_underscores");
         assert_eq!(umi1, b"AAACGC");
         assert_eq!(umi2, b"TTGGCC");
         assert_eq!(primers, b"MUC2+no_adapter");
 
-        let (id, umi1, umi2, primers) =
-            split_tagged_qname(b"READ_AAACGC_TTGGCC|CCL4|CCL4L2+CCL4|CCL4L2")?;
-        assert_eq!(id, b"READ");
-        assert_eq!(umi1, b"AAACGC");
-        assert_eq!(umi2, b"TTGGCC");
+        let (id, umi1, umi2, primers) = split_tagged_qname(
+            b"AV100007:20260526_DRG_AVITI2:2519664043:2:11001:1159:1029_TGCTCA_CCCGTG_CCL4|CCL4L2+CCL4|CCL4L2",
+        )?;
+        assert_eq!(
+            id,
+            b"AV100007:20260526_DRG_AVITI2:2519664043:2:11001:1159:1029"
+        );
+        assert_eq!(umi1, b"TGCTCA");
+        assert_eq!(umi2, b"CCCGTG");
         assert_eq!(primers, b"CCL4|CCL4L2+CCL4|CCL4L2");
+
+        let (id, umi1, umi2, primers) = split_tagged_qname(
+            b"AV100007:20260526_DRG_AVITI2:2519664043:2:20905:0584:2299_AACCGA_TGAGT_GAPDH+GAPDH",
+        )?;
+        assert_eq!(
+            id,
+            b"AV100007:20260526_DRG_AVITI2:2519664043:2:20905:0584:2299"
+        );
+        assert_eq!(umi1, b"AACCGA");
+        assert_eq!(umi2, b"TGAGT");
+        assert_eq!(primers, b"GAPDH+GAPDH");
+
+        let (id, umi1, umi2, primers) = split_tagged_qname(
+            b"AV100007:20260526_DRG_AVITI2:2519664043:2:21402:2802:3497_AGGAAAT_CTCGGA_RPS18+RPS18",
+        )?;
+        assert_eq!(
+            id,
+            b"AV100007:20260526_DRG_AVITI2:2519664043:2:21402:2802:3497"
+        );
+        assert_eq!(umi1, b"AGGAAAT");
+        assert_eq!(umi2, b"CTCGGA");
+        assert_eq!(primers, b"RPS18+RPS18");
         Ok(())
     }
 
     /// QNAME parsing should keep empty UMI fields from no-adapter reads.
     #[test]
     fn split_tagged_qname_allows_empty_umi_fields() -> Result<()> {
-        let (id, umi1, umi2, primers) = split_tagged_qname(b"READ_AAACGC_|MUC2+no_adapter")?;
+        let (id, umi1, umi2, primers) = split_tagged_qname(b"READ_AAACGC__MUC2+no_adapter")?;
         assert_eq!(id, b"READ");
         assert_eq!(umi1, b"AAACGC");
         assert_eq!(umi2, b"");
         assert_eq!(primers, b"MUC2+no_adapter");
 
-        let (id, umi1, umi2, primers) = split_tagged_qname(b"READ__|no_adapter+no_adapter")?;
+        let (id, umi1, umi2, primers) = split_tagged_qname(b"READ___no_adapter+no_adapter")?;
         assert_eq!(id, b"READ");
         assert_eq!(umi1, b"");
         assert_eq!(umi2, b"");

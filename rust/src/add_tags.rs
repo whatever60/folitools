@@ -147,11 +147,10 @@ pub fn run(args: Args) -> Result<()> {
     let mut counted_count: u64 = 0;
     let mut counted_assigned_count: u64 = 0;
 
-    // Per-QNAME flag set on any primary R1 that satisfies criteria_ok. Read by
-    // finalize_group to compute counted = mapped & good_umi (the QNAMEs that
-    // can land in group.tsv.gz) and counted_assigned = counted & assigned
-    // (the QNAMEs that survive the get_matrix Unassigned-row filter and
-    // contribute to the raw count matrix). Reset on each QNAME boundary.
+    // Per-QNAME flags derived from the encoded R1 name. finalize_group updates
+    // the counters only after repairing duplicate primaries, so a malformed
+    // QNAME with two primary R1 records still contributes exactly once.
+    let mut current_not_na_adapter: bool = false;
     let mut current_good_umi: bool = false;
 
     let mut record = Record::new();
@@ -173,15 +172,20 @@ pub fn run(args: Args) -> Result<()> {
                 &current_qname,
                 &mut writer,
                 log_fh.as_mut(),
+                &mut total_r1_count,
+                &mut not_na_adapter_count,
+                &mut good_umi_count,
                 &mut mapped_count,
                 &mut assigned_count,
                 &mut counted_count,
                 &mut counted_assigned_count,
+                current_not_na_adapter,
                 current_good_umi,
             )?;
             xt_values.clear();
             current_qname.clear();
             current_primers.clear();
+            current_not_na_adapter = false;
             current_good_umi = false;
         }
 
@@ -205,28 +209,6 @@ pub fn run(args: Args) -> Result<()> {
         let is_read1 = (flag & 0x40) != 0;
         let is_primary = (flag & 0x900) == 0;
 
-        // Count per-QNAME stats on the primary R1 so each read pair contributes
-        // once. not_na_adapter is adapter-only; good_umi additionally requires
-        // a clean UMI (== criteria_ok below, the gate for writing the UC tag),
-        // making it a subset of not_na_adapter so summary_stats'
-        // monotonic-non-increasing assert holds.
-        if is_read1 && is_primary {
-            total_r1_count += 1;
-            let umi_ok = umi1.len() == UMI_LEN
-                && umi2.len() == UMI_LEN
-                && !umi1.contains(&b'N')
-                && !umi2.contains(&b'N');
-            let adapter_ok =
-                primer_fwd.as_slice() != b"no_adapter" && primer_rev.as_slice() != b"no_adapter";
-            if adapter_ok {
-                not_na_adapter_count += 1;
-            }
-            if adapter_ok && umi_ok {
-                good_umi_count += 1;
-                current_good_umi = true;
-            }
-        }
-
         // Custom tags (CB/US/PR/UC/XN/XT default) go on R1 primary only:
         // umi_tools group/count in --paired mode only reads R1, and within
         // that, only the primary alignment carries XF (added in
@@ -235,17 +217,20 @@ pub fn run(args: Args) -> Result<()> {
         // SAM-spec-compliant input (one primary per mate per QNAME) at
         // exactly one tagged R1 per QNAME.
         if is_read1 && is_primary {
+            let umi_ok = umi1.len() == UMI_LEN
+                && umi2.len() == UMI_LEN
+                && !umi1.contains(&b'N')
+                && !umi2.contains(&b'N');
+            let adapter_ok =
+                primer_fwd.as_slice() != b"no_adapter" && primer_rev.as_slice() != b"no_adapter";
+            let criteria_ok = adapter_ok && umi_ok;
+            current_not_na_adapter = adapter_ok;
+            current_good_umi = criteria_ok;
+
             if let Some(cv) = args.cell_tag.as_deref() {
                 let _ = record.remove_aux(cell_tag_name_bytes);
                 record.push_aux(cell_tag_name_bytes, Aux::String(cv))?;
             }
-
-            let criteria_ok = umi1.len() == UMI_LEN
-                && umi2.len() == UMI_LEN
-                && !umi1.contains(&b'N')
-                && !umi2.contains(&b'N')
-                && primer_fwd.as_slice() != b"no_adapter"
-                && primer_rev.as_slice() != b"no_adapter";
 
             let us_str = std::str::from_utf8(&umi1).context("UMI not UTF-8")?;
             let _ = record.remove_aux(TAG_US);
@@ -295,10 +280,14 @@ pub fn run(args: Args) -> Result<()> {
             &current_qname,
             &mut writer,
             log_fh.as_mut(),
+            &mut total_r1_count,
+            &mut not_na_adapter_count,
+            &mut good_umi_count,
             &mut mapped_count,
             &mut assigned_count,
             &mut counted_count,
             &mut counted_assigned_count,
+            current_not_na_adapter,
             current_good_umi,
         )?;
     }
@@ -375,6 +364,36 @@ fn split_tagged_qname(qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8
     Err(bad_qname(qname, "missing UMI fields"))
 }
 
+/// Choose the sole primary candidate, preferring a unique mapped record when
+/// STAR emitted an unmapped secondary-alignment ghost without flag 0x100.
+fn select_primary_index(
+    primaries: &[Record],
+    indices: &[usize],
+    qname: &[u8],
+    mate: &str,
+) -> Result<Option<usize>> {
+    if indices.len() <= 1 {
+        return Ok(indices.first().copied());
+    }
+
+    let mapped: Vec<usize> = indices
+        .iter()
+        .copied()
+        .filter(|&i| (primaries[i].flags() & 0x4) == 0)
+        .collect();
+    if mapped.len() == 1 {
+        return Ok(Some(mapped[0]));
+    }
+
+    Err(anyhow!(
+        "ambiguous non-compliant primary {} records for {}: {} mapped among {} candidates",
+        mate,
+        String::from_utf8_lossy(qname),
+        mapped.len(),
+        indices.len(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,10 +468,14 @@ fn finalize_group(
     qname: &[u8],
     writer: &mut Writer,
     log_fh: Option<&mut std::fs::File>,
+    total_r1_count: &mut u64,
+    not_na_adapter_count: &mut u64,
+    good_umi_count: &mut u64,
     mapped_count: &mut u64,
     assigned_count: &mut u64,
     counted_count: &mut u64,
     counted_assigned_count: &mut u64,
+    not_na_adapter_for_qname: bool,
     good_umi_for_qname: bool,
 ) -> Result<()> {
     let mut r1_idxs: Vec<usize> = Vec::new();
@@ -465,7 +488,8 @@ fn finalize_group(
         }
     }
 
-    if r1_idxs.len() != 1 || r2_idxs.len() != 1 {
+    let non_compliant = r1_idxs.len() != 1 || r2_idxs.len() != 1;
+    if non_compliant {
         if let Some(fh) = log_fh {
             let dump: Vec<String> = primaries
                 .iter()
@@ -480,11 +504,14 @@ fn finalize_group(
                 dump.join(", "),
             );
         }
+
+        let r1_keep = select_primary_index(primaries, &r1_idxs, qname, "R1")?;
+        let r2_keep = select_primary_index(primaries, &r2_idxs, qname, "R2")?;
         let mut keep: HashSet<usize> = HashSet::new();
-        if let Some(&i) = r1_idxs.first() {
+        if let Some(i) = r1_keep {
             keep.insert(i);
         }
-        if let Some(&i) = r2_idxs.first() {
+        if let Some(i) = r2_keep {
             keep.insert(i);
         }
         // The extras we're about to downgrade are the "ghost" unmapped
@@ -517,6 +544,16 @@ fn finalize_group(
                 r.set_flags(f | 0x100);
                 let _ = r.remove_aux(TAG_HI);
             }
+        }
+    }
+
+    if r1_idxs.iter().any(|&i| (primaries[i].flags() & 0x900) == 0) {
+        *total_r1_count += 1;
+        if not_na_adapter_for_qname {
+            *not_na_adapter_count += 1;
+        }
+        if good_umi_for_qname {
+            *good_umi_count += 1;
         }
     }
 

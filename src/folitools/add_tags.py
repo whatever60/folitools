@@ -57,10 +57,9 @@ def add_tags_wo_fastq(
         # SAM spec: a record is primary iff FLAG & 0x900 == 0. Because mates
         # share a QNAME, the invariant is per-mate: at most one primary R1 and
         # one primary R2. STAR can, rarely, emit more than one such record per
-        # mate (non-compliant output). Treat that as a warning, not a fatal
-        # error: log it, and downgrade extras to secondary (flag |= 0x100) so
-        # the output BAM stays SAM-compliant and downstream (umi_tools) sees
-        # exactly one primary per mate.
+        # mate (non-compliant output). Retain a unique mapped candidate and
+        # downgrade STAR's unmapped ghost to secondary. Other duplicate shapes
+        # are ambiguous and fail rather than silently depending on input order.
         r1_entries = [r for k, r in primary_alignments if k == "R1"]
         r2_entries = [r for k, r in primary_alignments if k == "R2"]
         if len(r1_entries) != 1 or len(r2_entries) != 1:
@@ -75,13 +74,22 @@ def add_tags_wo_fastq(
                     f"(next read: {query_name_current})\n"
                 )
             keep = set()
-            if r1_entries:
-                keep.add(id(r1_entries[0]))
-            if r2_entries:
-                keep.add(id(r2_entries[0]))
+            for mate, entries in (("R1", r1_entries), ("R2", r2_entries)):
+                if len(entries) == 1:
+                    keep.add(id(entries[0]))
+                elif len(entries) > 1:
+                    mapped_entries = [r for r in entries if not r.is_unmapped]
+                    if len(mapped_entries) != 1:
+                        raise ValueError(
+                            f"Ambiguous primary {mate} records for {read_id}: "
+                            f"{len(mapped_entries)} mapped among {len(entries)} candidates"
+                        )
+                    keep.add(id(mapped_entries[0]))
             for _, r in primary_alignments:
                 if id(r) not in keep:
                     r.flag |= 0x100
+                    if r.has_tag("HI"):
+                        r.set_tag("HI", None)
 
         # Join unique XT tags, filter out any "Unassigned" tags if others exist
         genes = {

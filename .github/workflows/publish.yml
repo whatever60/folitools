@@ -22,6 +22,7 @@ jobs:
       - name: Run regression tests
         run: >-
           uv run --frozen pytest
+          tests/test_add_tags_primary_selection.py
           tests/test_unassigned_count_flow.py
           tests/test_summary_stats.py
 

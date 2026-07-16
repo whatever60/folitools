@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.9.2] - 2026-07-16
+
+### Fixed
+
+- STAR issue #2190 can emit an unmapped mate of a secondary alignment without
+  the secondary flag, leaving more than one apparent primary record for a
+  mate. `add_tags` now retains the uniquely mapped candidate regardless of
+  input order, downgrades the unmapped ghost, and removes its stale `HI` tag.
+- Ambiguous duplicate-primary groups now fail clearly instead of selecting an
+  arbitrary record. Per-QNAME read, adapter, and UMI counters are calculated
+  after primary selection so duplicate R1 records cannot be counted twice.
+- The Rust production implementation and Python reference implementation now
+  use the same repair and failure rules.
+
 ## [0.9.1] - 2026-07-16
 
 ### Fixed

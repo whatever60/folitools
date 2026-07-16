@@ -98,6 +98,70 @@ def test_read_counts_filters_unassigned_gene_prefix(tmp_path: Path) -> None:
     assert matrix.iloc[0, 0] == 1
 
 
+def test_read_counts_collapses_primer_annotations_before_counting(
+    tmp_path: Path,
+) -> None:
+    """Primer variants for one gene should share raw and deduplicated counts."""
+    group_tsv = tmp_path / "sample.group.tsv"
+    pd.DataFrame(
+        {
+            "read_id": ["read1", "read2", "read3"],
+            "contig": ["chr1", "chr1", "chr1"],
+            "position": [100, 100, 100],
+            "gene": [
+                "GENE1,FGR1+RVR1",
+                "GENE1,FGR2+RVR2",
+                "GENE1,FGR1+RVR1",
+            ],
+            "umi": ["AAAA", "AAAA", "CCCC"],
+            "umi_count": [2, 2, 1],
+            "final_umi": ["AAAA", "AAAA", "CCCC"],
+            "final_umi_count": [2, 2, 1],
+            "unique_id": ["0", "0", "1"],
+        }
+    ).to_csv(group_tsv, sep="\t", index=False)
+
+    raw = read_counts([str(group_tsv)], dedup_umi=False)
+    dedup = read_counts([str(group_tsv)], dedup_umi=True)
+
+    assert list(raw.columns) == ["GENE1"]
+    assert raw.iloc[0, 0] == 3
+    assert dedup.iloc[0, 0] == 2
+
+
+def test_read_counts_sums_gene_ids_with_the_same_symbol(tmp_path: Path) -> None:
+    """Distinct Ensembl IDs mapping to one symbol should preserve total reads."""
+    group_tsv = tmp_path / "sample.group.tsv"
+    gtf = tmp_path / "genes.gtf"
+    pd.DataFrame(
+        {
+            "read_id": ["read1", "read2"],
+            "contig": ["chr1", "chr1"],
+            "position": [100, 200],
+            "gene": [
+                "ENSG00000000001.1,FGR1+RVR1",
+                "ENSG00000000002.1,FGR2+RVR2",
+            ],
+            "umi": ["AAAA", "CCCC"],
+            "umi_count": [1, 1],
+            "final_umi": ["AAAA", "CCCC"],
+            "final_umi_count": [1, 1],
+            "unique_id": ["0", "1"],
+        }
+    ).to_csv(group_tsv, sep="\t", index=False)
+    gtf.write_text(
+        'chr1\ttest\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG00000000001.1"; '
+        'gene_name "GENE1";\n'
+        'chr1\ttest\tgene\t200\t300\t.\t+\t.\tgene_id "ENSG00000000002.1"; '
+        'gene_name "GENE1";\n'
+    )
+
+    matrix = read_counts([str(group_tsv)], gtf=str(gtf), dedup_umi=False)
+
+    assert list(matrix.columns) == ["GENE1"]
+    assert matrix.iloc[0, 0] == 2
+
+
 def test_get_count_mtx_writes_package_version_header(tmp_path: Path) -> None:
     """The exported matrix should stamp the package version in the first cell."""
     group_tsv = tmp_path / "sample.group.tsv"

@@ -10,6 +10,21 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Test count matrix and summary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.12"
+      - name: Run regression tests
+        run: >-
+          uv run --frozen pytest
+          tests/test_unassigned_count_flow.py
+          tests/test_summary_stats.py
+
   # Fail fast if someone tags a version that doesn't match pyproject.toml.
   check-version:
     name: Check tag ↔ pyproject.toml version
@@ -94,6 +109,7 @@ jobs:
     name: Publish to TestPyPI
     runs-on: ubuntu-latest
     needs:
+      - test
       - check-version
       - build-wheel-linux
       - build-wheel-macos
@@ -102,6 +118,7 @@ jobs:
     # without it by marking it a non-blocking need.
     if: |
       always() &&
+      needs.test.result == 'success' &&
       (needs.check-version.result == 'success' || needs.check-version.result == 'skipped') &&
       needs.build-wheel-linux.result == 'success' &&
       needs.build-wheel-macos.result == 'success' &&

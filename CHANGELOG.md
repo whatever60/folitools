@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.9.1] - 2026-07-16
+
+### Fixed
+
+- Count-matrix generation now removes the final primer-pair annotation before
+  raw-read and UMI aggregation, so alternate primer pairs for the same gene do
+  not create duplicate gene columns.
+- Ensembl IDs that resolve to the same simplified gene symbol are summed rather
+  than averaged. Raw matrix row sums now preserve counted assigned reads and
+  pass the strict summary consistency check.
+
 ## [0.9.0] - 2026-07-07
 
 ### Fixed

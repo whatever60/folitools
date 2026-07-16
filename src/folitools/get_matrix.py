@@ -115,7 +115,15 @@ def process_count_file_simple(
                 f"{n_unique} distinct read_ids"
             )
 
-            df = full.filter(~pl.col("gene").str.starts_with("Unassigned,"))
+            # XF stores one or more gene IDs followed by the primer pair.
+            # Primer pairs do not define separate count-matrix features.
+            df = full.filter(
+                ~pl.col("gene").str.starts_with("Unassigned,")
+            ).with_columns(
+                pl.col("gene")
+                .str.replace(r",[^,]*$", "")
+                .str.replace_all(",", "|")
+            )
             if dedup_umi:
                 gene_counts = deduplicate_umi(df)
             else:
@@ -131,7 +139,6 @@ def process_count_file_simple(
         s.name = sample
         series_list.append(s)
     matrix = pd.concat(series_list, axis=1).fillna(0).astype(int).transpose()
-    matrix.columns = matrix.columns.map(lambda x: "|".join(x.rsplit(",")[:-1]))
     return matrix
 
 
@@ -460,9 +467,8 @@ def read_counts(
         matrix = (
             matrix.transpose()
             .groupby(level=0, sort=False)
-            .mean()
+            .sum()
             .transpose()
-            .round()
             .astype(int)
         )
     # reorder columns by average rel ab

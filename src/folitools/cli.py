@@ -7,6 +7,7 @@ import os
 from cyclopts import App, Parameter
 
 from . import __version__
+from .dependencies import check_dependencies
 from .get_matrix import read_counts
 from .primer_info import get_read_stats
 from .summary import summary_stats
@@ -15,6 +16,13 @@ from .utils import expand_path_to_list
 app = App(help="Foli Tools CLI")
 FASTQ_EXTENSIONS = ["fq", "fastq", "fq.gz", "fastq.gz"]
 BAM_EXTENSIONS = ["bam", "sam", "sam.gz", "sam.bz2"]
+
+
+@app.command(help="Check external dependency paths, versions, and capabilities")
+def check() -> None:
+    """Check the command-line programs used by Folitools without changing them."""
+    if not check_dependencies():
+        raise SystemExit(1)
 
 
 def run(script_name: str, args: tuple) -> None:

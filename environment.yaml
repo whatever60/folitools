@@ -4,16 +4,20 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - python=3.13
+  - python>=3.12,<3.14
   - pip
   - rust
   - gcc
+  # Most runtime tools are intentionally not version-pinned so folitools can share
+  # an environment with other bioinformatics software. Run `foli check` to
+  # report the resolved versions and verify the command-line options we use.
   - fastp
   # cutadapt is installed from our fork via pip (see pyproject.toml); do not
   # bring in the PyPI/bioconda package here as it would shadow the fork.
   - samtools
   - bwa-mem2
-  - star
+  # Keep STAR aligned with the version used to build the shared genome index.
+  - star=2.7.11b
   - seqkit
   - fastqc
   - subread

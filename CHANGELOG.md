@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.9.3] - 2026-07-20
+
+### Added
+
+- `foli check` reports the resolved paths and versions of Folitools' external
+  command-line dependencies and checks the options used by the pipeline.
+- Missing or incompatible required programs produce a nonzero exit status;
+  missing optional accelerators are reported without failing.
+- A CI-only Conda lock tests the command against a reproducible external
+  toolchain without constraining user environments.
+
+### Changed
+
+- Most external tools remain intentionally unpinned in `environment.yaml` so
+  Folitools can coexist with other software in shared environments. STAR is
+  fixed at 2.7.11b to match the shared genome index, while Python accepts the
+  tested 3.12 and 3.13 releases. Development and release dependencies remain
+  reproducible through `uv.lock`.
+
 ## [0.9.2] - 2026-07-16
 
 ### Fixed

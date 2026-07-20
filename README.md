@@ -14,13 +14,27 @@ Install from PyPI:
 pip install folitools
 ```
 
-The dependencies from conda are also required (note: `cutadapt` is intentionally
-**not** in this list — see below):
+The external programs can be installed from Conda (note: `cutadapt` is
+intentionally **not** in this list — see below):
 
 ```bash
 conda install -c bioconda -c conda-forge \
-  fastp samtools bwa-mem2 star seqkit fastqc subread sambamba pigz gcc
+  fastp samtools bwa-mem2 "star=2.7.11b" seqkit fastqc subread sambamba pigz gcc
 ```
+
+Most external programs are intentionally not version-pinned, allowing Folitools
+to coexist with other tools in a shared environment. STAR is fixed at 2.7.11b
+to match the shared genome index. Check the exact executables selected from
+`PATH`, their versions, and the required command-line options without changing
+the environment:
+
+```bash
+foli check
+```
+
+Missing required programs or required options make the command exit nonzero.
+Optional programs such as `pigz` and `bwa-mem2` are reported without causing
+failure.
 
 ### Cutadapt fork
 

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.9.5] - 2026-09-16
+
+### Fixed
+
+- Fixes the UMI deduplication regression introduced in 0.9.1: identical UMIs
+  from different primer pairs are counted separately. Counts are then summed
+  into unique gene columns, with or without a GTF, while retaining original
+  gene-assignment boundaries during deduplication.
+
 ## [0.9.3] - 2026-07-20
 
 ### Added

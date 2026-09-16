@@ -5,6 +5,7 @@ import tomllib
 
 import pandas as pd
 import pysam
+import pytest
 
 from folitools import __version__
 from folitools.add_tags import add_tags_wo_fastq
@@ -98,35 +99,81 @@ def test_read_counts_filters_unassigned_gene_prefix(tmp_path: Path) -> None:
     assert matrix.iloc[0, 0] == 1
 
 
-def test_read_counts_collapses_primer_annotations_before_counting(
-    tmp_path: Path,
+@pytest.mark.parametrize("use_gtf", [False, True])
+def test_read_counts_deduplicates_within_primer_pairs_then_sums_genes(
+    tmp_path: Path, use_gtf: bool,
 ) -> None:
-    """Primer variants for one gene should share raw and deduplicated counts."""
+    """Keep primer-specific UMIs and emit one gene column with or without a GTF."""
     group_tsv = tmp_path / "sample.group.tsv"
+    gene_id = "ENSG00000000001.1"
     pd.DataFrame(
         {
-            "read_id": ["read1", "read2", "read3"],
-            "contig": ["chr1", "chr1", "chr1"],
-            "position": [100, 100, 100],
+            "read_id": ["read1", "read2", "read3", "read4"],
+            "contig": ["chr1"] * 4,
+            "position": [100] * 4,
             "gene": [
-                "GENE1,FGR1+RVR1",
-                "GENE1,FGR2+RVR2",
-                "GENE1,FGR1+RVR1",
+                f"{gene_id},FGR1+RVR1",
+                f"{gene_id},FGR2+RVR2",
+                f"{gene_id},FGR1+RVR1",
+                f"{gene_id},FGR1+RVR1",
             ],
-            "umi": ["AAAA", "AAAA", "CCCC"],
-            "umi_count": [2, 2, 1],
-            "final_umi": ["AAAA", "AAAA", "CCCC"],
-            "final_umi_count": [2, 2, 1],
-            "unique_id": ["0", "0", "1"],
+            "umi": ["AAAAAATTTTTT", "AAAAAATTTTTT", "CCCCCCGGGGGG", "AAAAAATTTTTT"],
+            "umi_count": [2, 1, 1, 2],
+            "final_umi": ["AAAAAATTTTTT", "AAAAAATTTTTT", "CCCCCCGGGGGG", "AAAAAATTTTTT"],
+            "final_umi_count": [2, 1, 1, 2],
+            "unique_id": ["0", "1", "2", "0"],
         }
     ).to_csv(group_tsv, sep="\t", index=False)
 
-    raw = read_counts([str(group_tsv)], dedup_umi=False)
-    dedup = read_counts([str(group_tsv)], dedup_umi=True)
+    gtf = None
+    if use_gtf:
+        gtf_path = tmp_path / "genes.gtf"
+        gtf_path.write_text(
+            'chr1\ttest\tgene\t1\t1000\t.\t+\t.\tgene_id "ENSG00000000001.1"; '
+            'gene_name "GENE1";\n'
+        )
+        gtf = str(gtf_path)
 
-    assert list(raw.columns) == ["GENE1"]
-    assert raw.iloc[0, 0] == 3
-    assert dedup.iloc[0, 0] == 2
+    raw = read_counts([str(group_tsv)], gtf=gtf, dedup_umi=False)
+    dedup = read_counts([str(group_tsv)], gtf=gtf, dedup_umi=True)
+
+    expected_gene = "GENE1" if use_gtf else gene_id
+    assert list(raw.columns) == list(dedup.columns) == [expected_gene]
+    assert raw.iloc[0, 0] == 4
+    assert dedup.iloc[0, 0] == 3
+
+
+def test_read_counts_keeps_original_gene_assignments_separate(tmp_path: Path) -> None:
+    """Sum simplified features without merging UMIs across original assignments."""
+    group_tsv = tmp_path / "sample.group.tsv"
+    gtf = tmp_path / "genes.gtf"
+    pd.DataFrame(
+        {
+            "read_id": ["read1", "read2"],
+            "contig": ["chr1", "chr1"],
+            "position": [100, 100],
+            "gene": [
+                "ENSG00000000001.1,FGR1+RVR1",
+                "ENSG00000000001.1,ENSG00000000002.1,FGR1+RVR1",
+            ],
+            "umi": ["AAAAAATTTTTT"] * 2,
+            "umi_count": [1, 1],
+            "final_umi": ["AAAAAATTTTTT"] * 2,
+            "final_umi_count": [1, 1],
+            "unique_id": ["0", "1"],
+        }
+    ).to_csv(group_tsv, sep="\t", index=False)
+    gtf.write_text(
+        'chr1\ttest\tgene\t1\t1000\t.\t+\t.\tgene_id "ENSG00000000001.1"; '
+        'gene_name "GENE1";\n'
+        'chr2\ttest\tgene\t1\t1000\t.\t+\t.\tgene_id "ENSG00000000002.1"; '
+        'gene_name "GENE1P1";\n'
+    )
+
+    matrix = read_counts([str(group_tsv)], gtf=str(gtf))
+
+    assert list(matrix.columns) == ["GENE1"]
+    assert matrix.iloc[0, 0] == 2
 
 
 def test_read_counts_sums_gene_ids_with_the_same_symbol(tmp_path: Path) -> None:

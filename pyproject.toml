@@ -1,11 +1,12 @@
 [project]
 name = "folitools"
-version = "0.9.5"
+version = "0.9.6"
 description = "Foli-seq data processing and analysis tools"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "biopython>=1.85",
+    "dnaio>=1.2.4",
     # cutadapt is pulled from our fork published on PyPI as
     # `cutadapt-folitools`. The fork installs the same `cutadapt` Python
     # module and `cutadapt` console script as upstream, but adds a

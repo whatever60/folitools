@@ -1,7 +1,11 @@
 """Helpers for FASTQ/BAM sample names and Foli-annotated read IDs."""
 
 from pathlib import Path
+import base64
 import re
+import sys
+
+import dnaio
 
 
 _PATH_SUFFIXES = (
@@ -19,6 +23,7 @@ _READ_RE = re.compile(
     re.IGNORECASE,
 )
 _UMI_RE = re.compile(r"^[ACGTN]*$", re.IGNORECASE)
+_DNA_DIGITS = str.maketrans("ACGTN_", "012345")
 
 
 def strip_path_suffix(path: str | Path) -> str:
@@ -70,6 +75,18 @@ def split_umi_read_id(read_id: str) -> tuple[str, str, str]:
 
 def split_tagged_qname(qname: str) -> tuple[str, str, str, str]:
     """Split the 0.7-style ``<read_id>_<umi1>_<umi2>_<primer1+primer2>`` QNAME."""
+    if "_~" in qname:
+        read_id, suffix = qname.rsplit("_~", 1)
+        encoded, primers = suffix.split("_", 1)
+        packed = int.from_bytes(base64.urlsafe_b64decode(encoded.replace(".", "_") + "=" * (-len(encoded) % 4)), "big")
+        bases = []
+        while packed > 1:
+            bases.append("ACGTN_"[packed & 7])
+            packed >>= 3
+        if packed != 1:
+            raise ValueError(f"Invalid packed QNAME: {qname}")
+        umi1, umi2 = "".join(reversed(bases)).split("_")
+        return read_id, umi1, umi2, primers
     parts = qname.split("_")
     for primer_idx in range(3, len(parts)):
         umi1 = parts[primer_idx - 2]
@@ -85,3 +102,24 @@ def split_tagged_qname(qname: str) -> tuple[str, str, str, str]:
                 raise ValueError(f"Unexpected read ID format: {qname}")
             return read_id, umi1, umi2, primers
     raise ValueError(f"Unexpected read ID format: {qname}")
+
+
+def bam_safe_qname(qname: str) -> str:
+    """Pack only overlong UMIs using three bits per A/C/G/T/N and separator."""
+    if len(qname.encode()) <= 254:
+        return qname
+    read_id, umi1, umi2, primers = split_tagged_qname(qname)
+    packed = int("1" + (umi1 + "_" + umi2).translate(_DNA_DIGITS), 8)
+    encoded = base64.urlsafe_b64encode(packed.to_bytes((packed.bit_length() + 7) // 8, "big")).decode().rstrip("=").replace("_", ".")
+    result = f"{read_id}_~{encoded}_{primers}"
+    if len(result.encode()) > 254:
+        raise ValueError("Read ID and primer names exceed BAM's QNAME capacity after UMI packing")
+    return result
+
+
+if __name__ == "__main__":
+    with dnaio.open(sys.stdin.buffer, mode="r", interleaved=True) as source, dnaio.open(sys.argv[1], sys.argv[2], mode="w", fileformat="fastq") as output:
+        for r1, r2 in source:
+            r1.name = bam_safe_qname(r1.name.replace(" ", "_"))
+            r2.name = bam_safe_qname(r2.name.replace(" ", "_"))
+            output.write(r1, r2)

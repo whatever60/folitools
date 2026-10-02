@@ -202,6 +202,12 @@ This command performs streamlined alignment and feature counting using `STAR` an
    - Gene assignments added as `XF` tag
    - BAM files are coordinate-sorted using `sambamba`
 
+Overlong mapping names use lossless three-bit UMI packing in the existing
+FASTQ stream. The final BAM keeps the original read ID in QNAME. Raw paired UMIs are
+stored in `RX` (`umi5-umi3`) and primer assignments in `PR`, so long annotations
+remain self-contained in BAM without an external lookup table. The 60:60
+filter and existing `US`/`UC`/`XF` counting rules are unchanged.
+
 **Core allocation**: The `--cores` parameter is automatically split between STAR (70%) and featureCounts (30%) to optimize pipeline throughput.
 
 **featureCounts defaults.** `foli map` runs featureCounts with

@@ -7,6 +7,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 
 use anyhow::{anyhow, Context, Result};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use clap::Parser;
 use rust_htslib::bam::{
     self,
@@ -204,6 +205,11 @@ pub fn run(args: Args) -> Result<()> {
         }
 
         record.set_qname(&id);
+        let rx = format!("{}-{}", std::str::from_utf8(&umi1)?, std::str::from_utf8(&umi2)?);
+        let _ = record.remove_aux(b"RX");
+        record.push_aux(b"RX", Aux::String(&rx))?;
+        let _ = record.remove_aux(TAG_PR);
+        record.push_aux(TAG_PR, Aux::String(std::str::from_utf8(&primers)?))?;
 
         let flag = record.flags();
         let is_read1 = (flag & 0x40) != 0;
@@ -236,9 +242,6 @@ pub fn run(args: Args) -> Result<()> {
             let _ = record.remove_aux(TAG_US);
             record.push_aux(TAG_US, Aux::String(us_str))?;
 
-            let pr_str = std::str::from_utf8(&primers).context("primers not UTF-8")?;
-            let _ = record.remove_aux(TAG_PR);
-            record.push_aux(TAG_PR, Aux::String(pr_str))?;
 
             if criteria_ok {
                 let mut uc = Vec::with_capacity(umi1.len() + umi2.len());
@@ -331,6 +334,33 @@ fn bad_qname(qname: &[u8], what: &str) -> anyhow::Error {
 
 /// Split the 0.7-style `<read_id>_<umi1>_<umi2>_<primer1+primer2>` QNAME.
 fn split_tagged_qname(qname: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> {
+    if let Some(marker) = qname.windows(2).rposition(|part| part == b"_~") {
+        let suffix = &qname[marker + 2..];
+        let end = suffix.iter().position(|b| *b == b'_').ok_or_else(|| bad_qname(qname, "missing primers"))?;
+        let encoded = std::str::from_utf8(&suffix[..end])?.replace('.', "_");
+        let packed = URL_SAFE_NO_PAD.decode(encoded)?;
+        let mut bases = Vec::new();
+        let mut buffer = 0usize;
+        let mut bits = 0usize;
+        for (index, byte) in packed.iter().enumerate() {
+            if index == 0 {
+                if *byte == 0 { return Err(bad_qname(qname, "invalid packed UMI")); }
+                bits = 7 - byte.leading_zeros() as usize;
+                buffer = *byte as usize ^ (1 << bits);
+            } else {
+                buffer = (buffer << 8) | *byte as usize;
+                bits += 8;
+            }
+            while bits >= 3 {
+                bits -= 3;
+                bases.push(*b"ACGTN_".get((buffer >> bits) & 7).ok_or_else(|| bad_qname(qname, "invalid packed base"))?);
+                buffer &= (1 << bits) - 1;
+            }
+        }
+        if bits != 0 || packed.is_empty() { return Err(bad_qname(qname, "invalid packed UMI length")); }
+        let split = bases.iter().position(|b| *b == b'_').ok_or_else(|| bad_qname(qname, "missing UMI separator"))?;
+        return Ok((qname[..marker].to_vec(), bases[..split].to_vec(), bases[split + 1..].to_vec(), suffix[end + 1..].to_vec()));
+    }
     let parts: Vec<&[u8]> = qname.split(|&b| b == b'_').collect();
     if parts.len() < 4 {
         return Err(bad_qname(qname, "missing UMI fields"));

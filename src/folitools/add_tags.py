@@ -139,6 +139,8 @@ def add_tags_wo_fastq(
             )
             primer_fwd, primer_rev = primers.split("+")
             read.query_name = query_name_simple
+            read.set_tag("RX", umi1 + "-" + umi2, value_type="Z")
+            read.set_tag(primer_tag_name, primers, value_type="Z")
 
             # One flag read; derive mate + primary-ness from bits. Avoids
             # read.is_read1 / is_secondary / is_supplementary (each is a
@@ -158,7 +160,6 @@ def add_tags_wo_fastq(
                     read.set_tag(cell_tag_name, cell_tag, value_type="Z")
 
                 read.set_tag(umi_tag_s_name, umi1, value_type="Z")
-                read.set_tag(primer_tag_name, primers, value_type="Z")
 
                 # Short-circuit chain beats building a list + all().
                 if (

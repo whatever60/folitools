@@ -8,6 +8,7 @@ import pytest
 
 from folitools._rust_native import run_add_tags
 from folitools.add_tags import add_tags_wo_fastq
+from folitools.read_names import bam_safe_qname
 
 
 def _read(
@@ -93,6 +94,31 @@ def _output_reads(path: Path) -> list[pysam.AlignedSegment]:
     """Read every output alignment without requiring an index."""
     with pysam.AlignmentFile(path, "rb") as bam_in:
         return list(bam_in.fetch(until_eof=True))
+
+
+@pytest.mark.parametrize("runner", ["rust", "python"])
+@pytest.mark.parametrize("umis", [("AAAAAA", "TTTTTT"), ("A" * 150, "N" * 150), ("", "")])
+def test_sam_tags_preserve_long_annotations_and_existing_count_rules(tmp_path, runner, umis):
+    """Read annotations directly from self-contained BAM tags, including invalid UMIs."""
+    read_id = "read_with_underscores"
+    primers = "FGR|other+FGR|other"
+    input_bam = tmp_path / "input.bam"
+    output_bam = tmp_path / "output.bam"
+    qname = bam_safe_qname("_".join([read_id, *umis, primers]))
+    reads = [_read(qname, 99, 100, xt="ENSG000001"), _read(qname, 147, 200, xt="ENSG000001")]
+    _write_bam(input_bam, reads)
+    counters = _run_successful_tagger(runner, input_bam, output_bam, tmp_path / "tags.log")
+    output = _output_reads(output_bam)
+    assert [read.query_name for read in output] == [read_id, read_id]
+    assert [read.get_tag("RX") for read in output] == ["-".join(umis)] * 2
+    assert [read.get_tag("PR") for read in output] == [primers] * 2
+    primary_r1 = next(read for read in output if read.is_read1)
+    assert primary_r1.get_tag("US") == umis[0]
+    assert primary_r1.get_tag("XF") == f"ENSG000001,{primers}"
+    assert primary_r1.has_tag("UC") == (len(umis[0]) == len(umis[1]) == 6)
+    if counters is not None:
+        assert counters["total_r1"] == 1
+        assert counters["counted"] == (1 if len(umis[0]) == len(umis[1]) == 6 else 0)
 
 
 @pytest.mark.parametrize("runner", ["rust", "python"])

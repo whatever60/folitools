@@ -1,6 +1,6 @@
 [package]
 name = "folitools_rust"
-version = "0.9.5"
+version = "0.9.6"
 edition = "2021"
 
 [lib]
@@ -19,6 +19,7 @@ heavy_deps = ["dep:fastq", "dep:flate2", "dep:indicatif", "dep:polars", "dep:ray
 
 [dependencies]
 anyhow = "1.0"
+base64 = "0.22"
 clap = { version = "4.0", features = ["derive"] }
 rust-htslib = { version = "0.49", default-features = false, features = ["bzip2", "lzma"] }
 

@@ -186,9 +186,7 @@ for input_file in "${input_files[@]}"; do
         #   Otherwise, blocking still occurs, though I don't understand why.
         # 3. Record the PID of the STAR process and wait for it to finish before removing the FIFOs and running
         #   next steps. Otherwise the output of STAR might be incomplete.
-        # 4. Somehow cutadapt does not work well with FIFO files. That is, if I set -o and -p to FIFOs, it
-        #  will just block. Instead, I let cutadapt output interleaved FASTQ to stdout and used another awk
-        #  command to split it back into two FIFOs.
+        # 4. Split interleaved FASTQ to the FIFOs with the BAM-safe name encoder.
         # 5. FIFO file names must be explicit since STAR reads data based on file name extension. We not only
         #  need the FIFOs to be text (not gzipped), but also need to set --readFilesCommand to cat. Just
         #  setting --readFilesCommand to cat still results in error when the FIFOs are named with .gz.
@@ -234,22 +232,7 @@ for input_file in "${input_files[@]}"; do
             --minimum-length 60:60 \
             "$fqR1" "$fqR2" \
             2> /dev/null \
-            | awk -v p1="$FIFO_R1" -v p2="$FIFO_R2" \
-               '
-                    {
-                        # Replace space with underscore only on header lines
-                        if ((NR - 1) % 4 == 0) {
-                            gsub(" ", "_", $0)
-                        }
-
-                        # Write to R1 (first 4 lines) or R2 (next 4 lines) in each 8-line block
-                        if (((NR - 1) % 8) < 4) {
-                            print $0 > p1
-                        } else {
-                            print $0 > p2
-                        }
-                    }
-                '
+            | python -m folitools.read_names "$FIFO_R1" "$FIFO_R2"
         # Write EOF to the FIFOs to signal completion
         echo -e "\n" >&3
         echo -e "\n" >&4
@@ -352,7 +335,8 @@ for input_file in "${input_files[@]}"; do
         
         eval "$FEATURECOUNTS_CMD" \
             2> "$FEATURECOUNTS_DIR/$sample_name.log" \
-        & \
+        &
+        featurecounts_pid=$!
         samtools collate \
             -O \
             -u \
@@ -367,8 +351,10 @@ for input_file in "${input_files[@]}"; do
             --out "$TEMP_BAM" \
             /dev/stdin \
             2> /dev/null \
-        & \
-        wait
+        &
+        tags_pid=$!
+        wait "$tags_pid"
+        wait "$featurecounts_pid"
 
         rm -f "$FIFO"
 

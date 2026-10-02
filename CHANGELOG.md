@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
+## [0.9.6] - 2026-10-02
+
+### Fixed
+
+- Pack overlong UMIs losslessly using three bits per base in the existing
+  FASTQ mapping stream. Restore original read IDs and carry complete paired UMIs
+  and primer assignments in SAM/BAM `RX` and `PR` tags, avoiding BAM's
+  254-byte QNAME limit without truncation or an external lookup table.
+- Preserve the existing 60:60 filter, UMI validation, gene assignment, and
+  counting rules; previously encoded QNAME inputs remain supported.
+
 ## [0.9.5] - 2026-09-16
 
 ### Fixed

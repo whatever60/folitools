@@ -693,9 +693,10 @@ dependencies = [
 
 [[package]]
 name = "folitools_rust"
-version = "0.9.5"
+version = "0.9.6"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "fastq",
  "flate2",

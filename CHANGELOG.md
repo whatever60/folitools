@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Starting with version 0.3.2, releases are tracked here.
 
-## [0.9.6] - 2026-10-02
+## [0.9.6] - 2026-10-15
 
 ### Fixed
 
